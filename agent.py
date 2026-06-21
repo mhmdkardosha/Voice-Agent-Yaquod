@@ -1,6 +1,6 @@
 import logging
 import os
-from pathlib import Path
+import re
 from dotenv import load_dotenv
 load_dotenv(override=True)
 
@@ -10,15 +10,23 @@ from livekit.agents import Agent, AgentServer, AgentSession, RunContext, functio
 from livekit.plugins import google, openai
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
+_TASHKEEL_RE = re.compile(r"[\u064B-\u065F\u0670]")
+
+def _strip_tashkeel(text: str) -> str:
+    return _TASHKEEL_RE.sub("", text)
+
 logger = logging.getLogger("yaquod-agent")
 
 STARTER_GREETING = (
-    "Greet the user warmly in one short sentence, then ask how you can help. "
-    "Greet them in Arabic, since that's the default language."
+    "You are Yaquod (يَقُودْ). Greet the user warmly in one short Egyptian "
+    "Arabic sentence, then ask how you can help.\n"
+    "\n"
+    "TASHKEEL: Add full tashkeel to every word.\n"
+    "RESPONSE: Keep responses short, warm, and conversational."
 )
 
 LANGUAGE_CONFIGS = {
-    "ar": {"stt_lang": "ar-XA", "tts_lang": "ar-XA", "voice_name": "ar-XA-Chirp3-HD-Aoede"},
+    "ar": {"stt_lang": "ar-EG", "tts_lang": "ar-XA", "voice_name": "ar-XA-Chirp3-HD-Aoede"},
     "en": {"stt_lang": "en-US", "tts_lang": "en-US", "voice_name": "en-US-Chirp3-HD-Aoede"},
 }
 DEFAULT_LANG = "ar"
@@ -27,19 +35,37 @@ class Assistant(Agent):
     def __init__(self) -> None:
         super().__init__(
             instructions=(
-                "You are a helpful and concise voice assistant powered by Gemini. "
-                "You support two languages: Arabic and English. "
-                "Detect which language the user is speaking and call the "
-                "switch_language tool with that language code ('ar' or 'en') "
-                "every time you notice the user has switched languages — "
-                "including on their very first utterance if it differs from "
-                "the current language. Always reply in the language the user "
-                "just used. "
-                "Keep your answers short and conversational, as they will be "
-                "spoken out loud."
+                "<role>\n"
+                "You are Yaquod (يَقُود), a friendly voice agent.\n"
+                "</role>\n"
+                "\n"
+                "<languages>\n"
+                "- Support Egyptian Arabic (اللهجة المصرية) and English.\n"
+                "- Detect the user's language on every turn.\n"
+                "- If it differs from the current language, call switch_language.\n"
+                "- Always reply in the language the user just used.\n"
+                "</languages>\n"
+                "\n"
+                "<tone>\n"
+                "- Short, warm, conversational answers (spoken aloud).\n"
+                "- Natural and polite, as if talking to a friend.\n"
+                "</tone>\n"
+                "\n"
+                "<arabic_rule>\n"
+                "TASHKEEL: Every Arabic word MUST have full tashkeel "
+                "(fatha, kasra, damma, sukun, shadda). Without it the TTS "
+                "mispronounces words.\n"
+                "</arabic_rule>"
             )
         )
         self._current_lang = DEFAULT_LANG
+
+    async def transcription_node(self, text, model_settings):
+        async for chunk in text:
+            if isinstance(chunk, str):
+                yield _strip_tashkeel(chunk)
+            else:
+                yield chunk
 
     @function_tool
     async def switch_language(self, context: RunContext, language: str) -> str:
@@ -77,7 +103,7 @@ class Assistant(Agent):
 server = AgentServer()
 
 
-@server.rtc_session(agent_name="yaquod-agent")
+@server.rtc_session(agent_name="yaquod")
 async def my_agent(ctx: agents.JobContext):
     default_config = LANGUAGE_CONFIGS[DEFAULT_LANG]
 
@@ -93,7 +119,7 @@ async def my_agent(ctx: agents.JobContext):
         # model="llama3.1:8b",
         # base_url=os.getenv("OLLAMA_BASE_URL"),
     ),
-         llm=google.LLM(model='gemini-3.5-flash'),
+         llm=google.LLM(model='gemini-3.1-flash-lite'),
         tts=google.TTS(
             language=default_config["tts_lang"],
             voice_name=default_config["voice_name"],
