@@ -1,14 +1,9 @@
 import logging
 import os
 from pathlib import Path
-from turtle import mode
 from dotenv import load_dotenv
 load_dotenv()
 
-if os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
-    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(
-        Path(os.environ["GOOGLE_APPLICATION_CREDENTIALS"]).expanduser().resolve()
-    )
 
 from livekit import agents
 from livekit.agents import Agent, AgentServer, AgentSession, RunContext, function_tool
