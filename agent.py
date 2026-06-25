@@ -1,19 +1,21 @@
 import logging
-import os
 import re
-from dotenv import load_dotenv
-load_dotenv(override=True)
 
+from dotenv import load_dotenv
+
+load_dotenv(override=True)
 
 from livekit import agents
 from livekit.agents import Agent, AgentServer, AgentSession, RunContext, function_tool
-from livekit.plugins import google, openai
-from livekit.plugins.turn_detector.multilingual import MultilingualModel
+from livekit.agents.inference import TurnDetector
+from livekit.plugins import google
 
 _TASHKEEL_RE = re.compile(r"[\u064B-\u065F\u0670]")
 
+
 def _strip_tashkeel(text: str) -> str:
     return _TASHKEEL_RE.sub("", text)
+
 
 logger = logging.getLogger("yaquod-agent")
 
@@ -30,6 +32,7 @@ LANGUAGE_CONFIGS = {
     "en": {"stt_lang": "en-US", "tts_lang": "en-US", "voice_name": "en-US-Chirp3-HD-Aoede"},
 }
 DEFAULT_LANG = "ar"
+
 
 class Assistant(Agent):
     def __init__(self) -> None:
@@ -108,23 +111,22 @@ async def my_agent(ctx: agents.JobContext):
     default_config = LANGUAGE_CONFIGS[DEFAULT_LANG]
 
     session = AgentSession(
-        
         stt=google.STT(
             languages=[default_config["stt_lang"], LANGUAGE_CONFIGS["en"]["stt_lang"]],
             detect_language=True,
             model="chirp_3",
             location="us",
-        # ),
-        #  llm=openai.LLM.with_ollama(
-        # model="llama3.1:8b",
-        # base_url=os.getenv("OLLAMA_BASE_URL"),
-    ),
-         llm=google.LLM(model='gemini-3.1-flash-lite'),
+            # ),
+            #  llm=openai.LLM.with_ollama(
+            # model="llama3.1:8b",
+            # base_url=os.getenv("OLLAMA_BASE_URL"),
+        ),
+        llm=google.LLM(model="gemini-3.1-flash-lite"),
         tts=google.TTS(
             language=default_config["tts_lang"],
             voice_name=default_config["voice_name"],
         ),
-        turn_detection=MultilingualModel(),
+        turn_detection=TurnDetector(),
     )
 
     await session.start(room=ctx.room, agent=Assistant())

@@ -13,7 +13,7 @@ A bilingual (Arabic/English) real-time voice AI assistant powered by **LiveKit A
 
 ## Prerequisites
 
-- Python 3.10+
+- Python 3.11+
 - A [LiveKit Cloud](https://livekit.io) account
 - A Google Cloud project with Vertex AI API enabled and a service account
 
@@ -76,6 +76,30 @@ To run the LLM locally with Ollama instead of Google Gemini:
 
 > Note: With Ollama you still need Google Cloud credentials for STT and TTS (Chirp 3). Only the LLM changes.
 
+## Linting & Formatting
+
+This project uses [Ruff](https://docs.astral.sh/ruff) — a fast Python linter and formatter written in Rust.
+
+### Commands
+
+```bash
+# Lint (report issues)
+ruff check .
+
+# Lint + auto-fix safe issues
+ruff check --fix .
+
+# Format (rewrite files in place)
+ruff format .
+
+# Check if files are already formatted (no changes)
+ruff format --check .
+```
+
+### Configuration
+
+All settings live in `pyproject.toml` under `[tool.ruff]`, `[tool.ruff.lint]`, and `[tool.ruff.format]`.
+
 ## Usage
 
 Connect using any LiveKit-compatible client (e.g., [LiveKit CLI](https://github.com/livekit/livekit-cli), [Agents Playground](https://agents-playground.livekit.io), or a custom web/mobile app).
@@ -86,7 +110,7 @@ The agent greets in Arabic by default. Speak in Arabic or English — it auto-de
 
 - `agent.py` — Main application defining the `Assistant` class and RTC session
 - `environment.yml` — Conda environment specification
+- `pyproject.toml` — Linting and formatting configuration (ruff)
 - `tests/` — Unit tests for the agent configuration
 
-The agent uses LiveKit Agents **v1 session API** (`Agent`, `AgentServer`, `AgentSession`) with `google.STT`, `google.LLM`, and `google.TTS` plugins, plus `MultilingualModel` for turn detection.
-
+The agent uses LiveKit Agents **v1 session API** (`Agent`, `AgentServer`, `AgentSession`) with `google.STT`, `google.LLM`, and `google.TTS` plugins, plus `TurnDetector` for turn detection.
