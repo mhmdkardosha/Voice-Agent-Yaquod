@@ -18,7 +18,7 @@ from livekit.agents import (
     function_tool,
     inference,
 )
-from livekit.plugins import silero
+from livekit.plugins import azure, silero
 
 _TASHKEEL_RE = re.compile(r"[\u064B-\u065F\u0670]")
 
@@ -185,13 +185,8 @@ async def my_agent(ctx: agents.JobContext):
     default_config = LANGUAGE_CONFIGS[DEFAULT_LANG]
 
     session = AgentSession(
-        stt=inference.STT(
-            model="deepgram/nova-3",
-            language="multi",
-            extra_kwargs={
-                "punctuate": True,
-                "smart_format": True,
-            },
+        stt=azure.STT(
+            language=["ar-EG", "en-US"],
         ),
         llm=inference.LLM(model="google/gemini-3.1-flash-lite"),
         tts=inference.TTS(
