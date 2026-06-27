@@ -1,3 +1,7 @@
+*Maintained by Khaled Zakaria, Khaled Helmy, and Mohamed Kardosha.*
+
+> **Note:** The commit `feat: implement vehicle action model and APIs` was authored by **Khaled Helmy** and reviewed by **Khaled Zakaria**. Their names do not appear in the commit history due to a necessary history rewrite for consistency.
+
 # Yaquod Agent
 
 A bilingual (Arabic/English) real-time voice AI assistant powered by **LiveKit Agents** with **Azure Speech STT**, **Cartesia TTS**, and **Gemini LLM**.
