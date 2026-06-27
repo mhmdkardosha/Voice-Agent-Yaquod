@@ -162,7 +162,7 @@ class Assistant(Agent):
 
         try:
             response = requests.post(
-                "http://localhost:8000/api/vehicle/action",
+                "https://yaquod-agent.fastapicloud.dev/api/vehicle/action",
                 json=payload,
                 timeout=5,
             )
