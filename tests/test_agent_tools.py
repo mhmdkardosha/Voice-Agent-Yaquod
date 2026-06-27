@@ -40,7 +40,7 @@ class TestVehicleAction:
             )
 
         mock_post.assert_called_once_with(
-            "http://localhost:8000/api/vehicle/action",
+            "https://yaquod-agent.fastapicloud.dev/api/vehicle/action",
             json={
                 "vehicle_id": "vehicle_001",
                 "action": "set_level",
@@ -82,7 +82,7 @@ class TestVehicleAction:
             await assistant.vehicle_action(mock_context, action="ac_on", parameters=None)
 
         mock_post.assert_called_once_with(
-            "http://localhost:8000/api/vehicle/action",
+            "https://yaquod-agent.fastapicloud.dev/api/vehicle/action",
             json={"vehicle_id": "vehicle_001", "action": "ac_on", "parameters": {}},
             timeout=5,
         )
