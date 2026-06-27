@@ -16,3 +16,7 @@ dependencies:
       - fastapi
       - pydantic
       - ruff
+      - pytest
+      - pytest-asyncio
+      - httpx2
+      - uvicorn

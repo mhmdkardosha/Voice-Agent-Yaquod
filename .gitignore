@@ -22,9 +22,6 @@ venv/
 *~
 .codex/
 
-# Tests
-tests/
-
 # Runtime / cache
 .pytest_cache/
 .agents/

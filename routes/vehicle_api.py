@@ -1,5 +1,6 @@
 from fastapi import FastAPI
-from models.vehicle_action_model import VehicleAction
+
+from routes.models.vehicle_action_model import VehicleAction
 
 app = FastAPI()
 

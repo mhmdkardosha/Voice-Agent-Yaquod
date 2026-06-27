@@ -18,7 +18,7 @@ from livekit.agents import (
     function_tool,
     inference,
 )
-from livekit.plugins import azure, silero
+from livekit.plugins import azure
 
 _TASHKEEL_RE = re.compile(r"[\u064B-\u065F\u0670]")
 
@@ -197,7 +197,6 @@ async def my_agent(ctx: agents.JobContext):
         turn_handling=TurnHandlingOptions(
             turn_detection="vad",
         ),
-        vad=silero.VAD.load(),
     )
 
     await session.start(room=ctx.room, agent=Assistant())

@@ -30,3 +30,11 @@ jobs:
       - name: Run linter
         run: |
           ruff check .
+
+      - name: Install test dependencies
+        run: |
+          pip install fastapi pydantic httpx2 pytest pytest-asyncio requests python-dotenv
+
+      - name: Run tests
+        run: |
+          pytest -v --tb=short

@@ -112,6 +112,30 @@ ruff format --check .
 
 All settings live in `pyproject.toml` under `[tool.ruff]`, `[tool.ruff.lint]`, and `[tool.ruff.format]`.
 
+## Testing
+
+Tests use **pytest** with mocked HTTP — no network or running server required.
+
+### Run all tests
+
+```bash
+pytest -v
+```
+
+### Test structure
+
+| Test file | What it covers |
+| --- | --- |
+| `tests/test_vehicle_api.py` | FastAPI route validation — payload format, missing fields, status codes |
+| `tests/test_agent_tools.py` | Agent function-tool logic — action whitelist, payload construction, error handling, language switching |
+| `tests/test_integration.py` | Agent → API wiring — verifies the agent's HTTP calls match the API's expectations |
+
+The agent's `vehicle_action` and `switch_language` methods are tested by calling them directly with mock objects, simulating the LiveKit framework. This means if anyone edits the agent code and breaks the whitelist, payload format, or error handling, the tests fail immediately without needing a LiveKit cloud connection.
+
+### CI
+
+Every pull request to `main` runs Ruff linting + all tests via GitHub Actions.
+
 ## Usage
 
 Connect using any LiveKit-compatible client (e.g., [LiveKit CLI](https://github.com/livekit/livekit-cli), [Agents Playground](https://agents-playground.livekit.io), or a custom web/mobile app).
