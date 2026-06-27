@@ -27,9 +27,7 @@ class TestVehicleAction:
             mock_post.return_value.ok = True
             mock_post.return_value.status_code = 200
 
-            result = await assistant.vehicle_action(
-                mock_context, action="ac_on", parameters={}
-            )
+            result = await assistant.vehicle_action(mock_context, action="ac_on", parameters={})
 
         assert result == "Executed ac_on"
 
@@ -65,9 +63,7 @@ class TestVehicleAction:
             mock_post.return_value.ok = False
             mock_post.return_value.status_code = 500
 
-            result = await assistant.vehicle_action(
-                mock_context, action="ac_on", parameters={}
-            )
+            result = await assistant.vehicle_action(mock_context, action="ac_on", parameters={})
 
         assert result == "Vehicle API error"
 
@@ -75,9 +71,7 @@ class TestVehicleAction:
         with patch("requests.post") as mock_post:
             mock_post.side_effect = Exception("Connection refused")
 
-            result = await assistant.vehicle_action(
-                mock_context, action="ac_on", parameters={}
-            )
+            result = await assistant.vehicle_action(mock_context, action="ac_on", parameters={})
 
         assert result == "Vehicle system unavailable"
 
