@@ -1,9 +1,10 @@
 import json
 import logging
+import os
 import re
 from collections.abc import AsyncGenerator, AsyncIterable
 
-import requests
+import httpx2
 from dotenv import load_dotenv
 
 load_dotenv(override=True)
@@ -44,6 +45,8 @@ LANGUAGE_CONFIGS = {
 }
 
 DEFAULT_LANG = "ar"
+GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
+VEHICLE_API_URL = "https://yaquod-agent.fastapicloud.dev/api/vehicle"
 
 
 class Assistant(Agent):
@@ -106,13 +109,13 @@ class Assistant(Agent):
         logger.info("Vehicle Action:\n%s", json.dumps(payload, indent=2))
 
         try:
-            response = requests.post(
-                "https://yaquod-agent.fastapicloud.dev/api/vehicle/action",
-                json=payload,
-                timeout=5,
-            )
+            async with httpx2.AsyncClient(timeout=5.0) as client:
+                response = await client.post(
+                    f"{VEHICLE_API_URL}/action",
+                    json=payload,
+                )
 
-            if response.ok:
+            if response.is_success:
                 return f"Executed {action}"
             else:
                 return "Vehicle API error"
@@ -120,6 +123,89 @@ class Assistant(Agent):
         except Exception as e:
             logger.error(f"API error: {e}")
             return "Vehicle system unavailable"
+
+    async def _get_vehicle_location(self) -> tuple[float, float] | None:
+        """Fetch current vehicle location from the vehicle API."""
+        try:
+            async with httpx2.AsyncClient() as client:
+                response = await client.get(
+                    f"{VEHICLE_API_URL}/location",
+                    timeout=5.0,
+                )
+                if response.is_success:
+                    data = response.json()
+                    return data["lat"], data["lng"]
+                return None
+        except Exception as e:
+            logger.error(f"Location fetch error: {e}")
+            return None
+
+    @function_tool
+    async def search_nearby_places(
+        self,
+        context: RunContext,
+        query: str,
+        radius_meters: int = 1500,
+    ) -> str:
+        """Search for nearby places using Google Maps Places API."""
+        if not GOOGLE_MAPS_API_KEY:
+            return "Google Maps API key not configured."
+
+        location = await self._get_vehicle_location()
+        if not location:
+            return "Unable to get vehicle location for search."
+
+        lat, lng = location
+
+        url = "https://places.googleapis.com/v1/places:searchText"
+        headers = {
+            "X-Goog-Api-Key": GOOGLE_MAPS_API_KEY,
+            "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.rating,places.currentOpeningHours.openNow",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "textQuery": query,
+            "locationBias": {
+                "circle": {
+                    "center": {"latitude": lat, "longitude": lng},
+                    "radius": radius_meters,
+                }
+            },
+        }
+
+        try:
+            async with httpx2.AsyncClient(timeout=10.0) as client:
+                response = await client.post(url, headers=headers, json=payload)
+
+            if response.status_code != 200:
+                return "Places search failed. Please try again."
+
+            data = response.json()
+            places = data.get("places", [])
+
+            if not places:
+                return f"No results found for '{query}' nearby."
+
+            results = []
+            for place in places[:5]:
+                name = place.get("displayName", {}).get("text", "Unknown")
+                address = place.get("formattedAddress", "No address")
+                rating = place.get("rating", "N/A")
+                open_now = place.get("currentOpeningHours", {}).get("openNow", None)
+                open_status = "Open" if open_now else "Closed" if open_now is not None else ""
+
+                result = f"{name}, {address}"
+                if rating != "N/A":
+                    result += f", Rating: {rating}"
+                if open_status:
+                    result += f", {open_status}"
+                results.append(result)
+
+            return "Found: " + "; ".join(results)
+
+        except Exception as e:
+            logger.error(f"Places API error: {e}")
+            return "Places search unavailable."
 
 
 server = AgentServer()

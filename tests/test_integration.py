@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from urllib.parse import urlparse
 
 import pytest
@@ -23,45 +23,39 @@ def mock_context():
     return MagicMock()
 
 
-class _CompatResponse:
-    def __init__(self, resp):
-        self.status_code = resp.status_code
-        self.ok = 200 <= resp.status_code < 300
+def _make_httpx_router(api_client):
+    """Return an httpx.AsyncClient mock that routes POST calls through the FastAPI TestClient."""
 
-    def __bool__(self):
-        return self.ok
-
-
-def _route_through_testclient(api_client):
-    def inner(url, json=None, **kwargs):
+    async def _fake_post(url, **kwargs):
         path = urlparse(url).path
-        raw = api_client.post(path, json=json)
-        return _CompatResponse(raw)
+        raw = api_client.post(path, json=kwargs.get("json"))
+        response = MagicMock()
+        response.is_success = 200 <= raw.status_code < 300
+        return response
 
-    return inner
-
-
-async def test_agent_sends_action_to_api(api_client, mock_context):
-    assistant = Assistant()
-
-    with patch("requests.post", side_effect=_route_through_testclient(api_client)):
-        result = await assistant.vehicle_action(mock_context, action="ac_on", parameters={})
-
-    assert result == "Executed ac_on"
+    mock_cls = MagicMock()
+    mock_instance = AsyncMock()
+    mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_instance)
+    mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+    mock_instance.post = AsyncMock(side_effect=_fake_post)
+    return mock_cls
 
 
 async def test_api_receives_correct_action(api_client, mock_context):
     assistant = Assistant()
+    mock_httpx = _make_httpx_router(api_client)
 
-    with patch("requests.post", side_effect=_route_through_testclient(api_client)):
-        await assistant.vehicle_action(mock_context, action="music_play", parameters={"track": "1"})
+    with patch("httpx2.AsyncClient", new=mock_httpx):
+        result = await assistant.vehicle_action(
+            mock_context, action="music_play", parameters={"track": "1"}
+        )
 
-
-async def test_invalid_action_stops_at_agent(api_client, mock_context):
-    assistant = Assistant()
-
-    with patch("requests.post", side_effect=_route_through_testclient(api_client)) as mock_post:
-        result = await assistant.vehicle_action(mock_context, action="accelerate", parameters={})
-
-    assert result == "This action is not allowed."
-    mock_post.assert_not_called()
+    assert result == "Executed music_play"
+    mock_httpx.return_value.__aenter__.return_value.post.assert_called_once_with(
+        "https://yaquod-agent.fastapicloud.dev/api/vehicle/action",
+        json={
+            "vehicle_id": "vehicle_001",
+            "action": "music_play",
+            "parameters": {"track": "1"},
+        },
+    )

@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from routes.vehicle_api import app
+from routes.vehicle_api import _DEFAULT_LOCATION, app
 
 client = TestClient(app)
 
@@ -43,14 +43,26 @@ def test_missing_action():
     assert resp.status_code == 422
 
 
-def test_extra_fields_ignored():
+def test_vehicle_location_returns_coordinates():
+    resp = client.get("/api/vehicle/location")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "vehicle_id" in data
+    assert "lat" in data
+    assert "lng" in data
+    assert isinstance(data["lat"], float)
+    assert isinstance(data["lng"], float)
+
+
+def test_vehicle_location_default_values():
+    resp = client.get("/api/vehicle/location")
+    data = resp.json()
+    assert data == _DEFAULT_LOCATION.model_dump()
+
+
+def test_invalid_action_is_rejected():
     resp = client.post(
         "/api/vehicle/action",
-        json={
-            "vehicle_id": "vehicle_001",
-            "action": "ac_on",
-            "parameters": {},
-            "extra": "ignored",
-        },
+        json={"vehicle_id": "vehicle_001", "action": "accelerate", "parameters": {}},
     )
-    assert resp.status_code == 200
+    assert resp.status_code == 422

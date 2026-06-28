@@ -12,7 +12,6 @@ dependencies:
       - livekit-plugins-turn-detector
       - python-dotenv
       - llama-index
-      - requests
       - fastapi
       - pydantic
       - ruff
