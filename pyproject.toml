@@ -65,6 +65,9 @@ line-ending = "auto"
 requires = ["setuptools>=69", "wheel"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools]
+py-modules = ["agent"]
+
 [tool.setuptools.packages.find]
 include = [
     "config",
