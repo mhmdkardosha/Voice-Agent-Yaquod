@@ -46,7 +46,9 @@ async def test_api_receives_correct_action(api_client, mock_context):
     mock_httpx = _make_httpx_router(api_client)
 
     with patch("httpx2.AsyncClient", new=mock_httpx):
-        result = await assistant.vehicle_action(mock_context, action="music_play", parameters={"track": "1"})
+        result = await assistant.vehicle_action(
+            mock_context, action="music_play", parameters={"track": "1"}
+        )
 
     assert result == "Executed music_play"
     mock_httpx.return_value.__aenter__.return_value.post.assert_called_once_with(
