@@ -36,6 +36,6 @@ VALID_FAN_SPEEDS = {0, 1, 2, 3, 4, 5}
 
 VALID_AIRFLOW_MODES = {"face", "feet", "face_feet"}
 
-VALID_SEAT_TYPE = {"driver" , "passenger"}
+VALID_SEAT_TYPE = {"driver", "passenger"}
 
-VALID_LIGHT_TYPES = {"front" , "rear" , "both"}
+VALID_LIGHT_TYPES = {"front", "rear", "both"}
