@@ -1,22 +1,5 @@
 from pydantic import BaseModel, field_validator
-
-ALLOWED_ACTIONS = {
-    "ac_on",
-    "ac_off",
-    "set_level",
-    "window_open",
-    "window_close",
-    "music_play",
-    "music_pause",
-    "set_volume",
-    "next_track",
-    "previous_track",
-    "reading_light_on",
-    "reading_light_off",
-    "change_destination",
-    "cancel_destination",
-    "safe_stop",
-}
+from config.constants import ALLOWED_ACTIONS
 
 
 class VehicleAction(BaseModel):
