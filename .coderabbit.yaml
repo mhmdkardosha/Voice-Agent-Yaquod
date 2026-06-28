@@ -1,0 +1,35 @@
+version: "2"
+
+reviews:
+  
+  profile: "assertive"
+  poem: false
+  auto_review: false
+  collapse_walkthroughs: true
+  
+  path_filters:
+    - "!node_modules/**"
+    - "!vendor/**"
+    - "!dist/**"
+    - "!build/**"
+    - "!.github/**"
+    - "!poetry.lock"
+    - "!package-lock.json"
+    - "!go.sum"
+    - "!yarn.lock"
+    - "!**.md" 
+    - "!**.svg"
+    - "!**.png"
+
+  instructions: |
+    You are an expert staff engineer performing a strict, production-grade code review.
+    Focus heavily on:
+    1. Performance bottlenecks, asynchronous race conditions, and memory leaks.
+    2. Edge cases, improper error handling, and security vulnerabilities (e.g., injection, unsafe mutations).
+    3. Adherence to Clean Code principles: DRY, KISS, and appropriate separation of concerns.
+    
+    Do NOT point out trivial syntax issues that a standard linter or formatter (like Prettier, Black, or Ruff) would catch. 
+    Be direct, concise, and provide concrete code refactoring snippets where applicable.
+
+chat:
+  enabled: true
