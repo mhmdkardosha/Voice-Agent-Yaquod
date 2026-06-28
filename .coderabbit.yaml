@@ -4,7 +4,8 @@ reviews:
   
   profile: "assertive"
   poem: false
-  auto_review: false
+  auto_review:
+    enabled: true
   collapse_walkthroughs: true
   
   path_filters:
