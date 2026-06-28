@@ -9,6 +9,7 @@ dependencies:
       - livekit-agents
       - livekit-plugins-silero
       - livekit-plugins-azure
+      - livekit-plugins-openai
       - livekit-plugins-turn-detector
       - python-dotenv
       - llama-index
