@@ -80,7 +80,7 @@ SYSTEM_PROMPT = (
     "- If user does not specify a window ask him which window he want from Allowed window values.\n"
     "- If user opens a window without specifying percentage use percentage=100.\n"
     "- If user closes a window without specifying percentage use percentage=0.\n"
-    "For window_lock use ONLY:\n"
+    "For window_lock use ONLY the following schema:\n"
     "{}\n\n"
     "Rules:\n"
     "- Do not include any parameters.\n\n"
