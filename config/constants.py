@@ -9,6 +9,7 @@ ALLOWED_ACTIONS = {
     "window_open",
     "window_close",
     "window_lock",
+    "window_unlock",
     "music_play",
     "music_pause",
     "set_volume",

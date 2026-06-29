@@ -1,3 +1,4 @@
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -43,6 +44,7 @@ VALID_PARAMETERS = {
     "seat_recline": {"seat": "passenger", "percentage": 0},
     "seat_height": {"seat": "passenger", "percentage": 50},
     "window_lock": {},
+    "window_unlock": {},
 }
 
 
@@ -261,3 +263,98 @@ class TestSearchNearbyPlaces:
             )
             result = await assistant.search_nearby_places(mock_context, query="coffee")
         assert result == "Places search failed. Please try again."
+
+
+class TestGetWeather:
+    def _mock_location_success(self, mock_client, lat: float, lng: float):
+        mock_client.return_value.__aenter__.return_value.get.return_value = MagicMock(
+            is_success=True,
+            json=lambda: {"vehicle_id": "vehicle_001", "lat": lat, "lng": lng},
+        )
+
+    async def test_successful_weather_fetch(self, assistant, mock_context):
+        mock_weather_response = {
+            "location": {"name": "Cairo"},
+            "current": {"temp_c": 35, "condition": {"text": "Sunny"}},
+        }
+
+        with (
+            patch.dict(os.environ, {"WEATHER_API_KEY": "test_key"}),
+            patch("httpx2.AsyncClient") as mock_client,
+        ):
+            # First call: location GET, Second call: weather GET
+            mock_get = mock_client.return_value.__aenter__.return_value.get
+            location_response = MagicMock(
+                is_success=True,
+                json=lambda: {"vehicle_id": "vehicle_001", "lat": 30.0, "lng": 31.0},
+            )
+            weather_response = MagicMock(
+                is_success=True,
+                json=lambda: mock_weather_response,
+            )
+            mock_get.side_effect = [location_response, weather_response]
+
+            result = await assistant.get_weather(mock_context)
+
+        assert "Cairo" in result
+        assert "35" in result
+        assert "Sunny" in result
+
+    async def test_location_unavailable(self, assistant, mock_context):
+        with patch("httpx2.AsyncClient") as mock_client:
+            mock_client.return_value.__aenter__.return_value.get.return_value = MagicMock(
+                is_success=False,
+            )
+
+            result = await assistant.get_weather(mock_context)
+
+        assert "unavailable" in result.lower() or "invalid" in result.lower()
+
+    async def test_weather_api_error(self, assistant, mock_context):
+        with (
+            patch.dict(os.environ, {"WEATHER_API_KEY": "test_key"}),
+            patch("httpx2.AsyncClient") as mock_client,
+        ):
+            mock_get = mock_client.return_value.__aenter__.return_value.get
+            location_response = MagicMock(
+                is_success=True,
+                json=lambda: {"vehicle_id": "vehicle_001", "lat": 30.0, "lng": 31.0},
+            )
+            weather_error_response = MagicMock(
+                is_success=False,
+                status_code=500,
+            )
+            mock_get.side_effect = [location_response, weather_error_response]
+
+            result = await assistant.get_weather(mock_context)
+
+        assert "error" in result.lower() or "unavailable" in result.lower()
+
+    async def test_weather_network_exception(self, assistant, mock_context):
+        with (
+            patch.dict(os.environ, {"WEATHER_API_KEY": "test_key"}),
+            patch("httpx2.AsyncClient") as mock_client,
+        ):
+            mock_get = mock_client.return_value.__aenter__.return_value.get
+            location_response = MagicMock(
+                is_success=True,
+                json=lambda: {"vehicle_id": "vehicle_001", "lat": 30.0, "lng": 31.0},
+            )
+            mock_get.side_effect = [location_response, Exception("Connection timeout")]
+
+            result = await assistant.get_weather(mock_context)
+
+        assert "unavailable" in result.lower()
+
+    async def test_missing_weather_api_key(self, assistant, mock_context):
+        with (
+            patch.dict(os.environ, {}, clear=False),
+            patch("httpx2.AsyncClient") as mock_client,
+        ):
+            os.environ.pop("WEATHER_API_KEY", None)
+            self._mock_location_success(mock_client, lat=30.0, lng=31.0)
+
+            result = await assistant.get_weather(mock_context)
+
+        assert "WEATHER_API_KEY" in result
+        assert "configured" in result.lower()

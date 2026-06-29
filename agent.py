@@ -146,6 +146,9 @@ class Assistant(Agent):
 
         # Get Weather
         weather_api_key = os.environ.get("WEATHER_API_KEY")
+        if not weather_api_key:
+            return "WEATHER_API_KEY is not configured."
+
         weather_url = "https://api.weatherapi.com/v1/current.json"
 
         weather_params = {"key": weather_api_key, "q": f"{lat},{lon}", "lang": api_lang}
