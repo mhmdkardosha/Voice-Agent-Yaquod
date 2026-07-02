@@ -19,6 +19,8 @@ EXPECTED_PARAMETERS = {
     "window_close": {"window", "percentage"},
     "music_play": set(),
     "music_pause": set(),
+    "next_track": set(),
+    "previous_track": set(),
     "set_volume": {"change"},
     "reading_light_on": {"light"},
     "reading_light_off": {"light"},
@@ -109,6 +111,7 @@ def validate_vehicle_action(action: str, parameters: dict | None) -> str | None:
         if not (-100 <= change <= 100):
             return "Volume change must be between -100 and 100."
 
+    # Seat action validation
     elif action in ("seat_position", "seat_recline", "seat_height"):
         seat = parameters.get("seat")
         percentage = parameters.get("percentage")
@@ -125,6 +128,7 @@ def validate_vehicle_action(action: str, parameters: dict | None) -> str | None:
         if action in ("seat_position", "seat_height") and not (0 <= percentage <= 100):
             return "Percentage must be between 0 and 100."
 
+    # Reading light action validation
     elif action in ("reading_light_on", "reading_light_off"):
         light = parameters.get("light")
 

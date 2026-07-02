@@ -92,6 +92,8 @@ class Assistant(Agent):
         action: str,
         parameters: dict | None = None,
     ) -> str:
+        """Executes a vehicle action via the Vehicle API."""
+
         parameters = parameters or {}
 
         # Safety whitelist check

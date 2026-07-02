@@ -13,6 +13,8 @@ ALLOWED_ACTIONS = {
     "music_play",
     "music_pause",
     "set_volume",
+    "next_track",
+    "previous_track",
     "reading_light_on",
     "reading_light_off",
     "change_destination",

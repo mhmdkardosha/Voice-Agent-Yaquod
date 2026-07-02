@@ -34,6 +34,8 @@ VALID_PARAMETERS = {
     "window_close": {"window": "all", "percentage": 0},
     "music_play": {},
     "music_pause": {},
+    "next_track": {},
+    "previous_track": {},
     "set_volume": {"change": 5},
     "reading_light_on": {"light": "both"},
     "reading_light_off": {"light": "both"},
