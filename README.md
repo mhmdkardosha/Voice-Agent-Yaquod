@@ -12,6 +12,8 @@ A bilingual (Arabic/English) real-time voice AI assistant powered by **LiveKit A
 - **Google Gemini 3.1 Flash Lite** for conversational LLM (via LiveKit Inference)
 - **Multilingual turn detection** for natural conversation flow
 - **Nearby Places Search** — find restaurants, gas stations, hospitals, and more using Google Maps Places API
+- **Weather lookup** through WeatherAPI.com
+- **Allowed-action whitelist** for vehicle controls to enforce safety
 
 ## Prerequisites
 
@@ -155,8 +157,8 @@ The agent greets in Arabic by default. Speak in Arabic or English — it auto-de
 - `agent.py` — Main application defining the `Assistant` class and RTC session
 - `config/` — Shared constants (`ALLOWED_ACTIONS`, validation sets)
 - `llm/` — `SYSTEM_PROMPT` and `STARTER_GREETING` prompt strings
-- `utils/` — Parameter validation logic (`validate_vehicle_action`)
-- `routes/` — FastAPI app (`vehicle_api.py`) and request models (`vehicle_action_model.py`)
+- `utils/` — Helper functions for Google Places integration and vehicle action validation
+- `routes/` — FastAPI app (`vehicle_api.py`) and request models (`vehicle_action_model.py`, `navigation_models.py`)
 - `environment.yml` — Conda environment specification
 - `pyproject.toml` — Linting, formatting, and packaging configuration (ruff + setuptools)
 - `tests/` — Unit and integration tests
