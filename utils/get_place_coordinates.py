@@ -9,7 +9,9 @@ async def get_place_coordinates(destination: str) -> dict | None:
     """
     Search Google Places and return the first matching place.
     """
-
+    if not GOOGLE_MAPS_API_KEY:
+        return None
+    
     url = "https://places.googleapis.com/v1/places:searchText"
 
     headers = {
