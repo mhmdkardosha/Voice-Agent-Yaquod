@@ -23,6 +23,7 @@ from livekit.plugins import azure
 
 from config.constants import ALLOWED_ACTIONS
 from llm.prompts import STARTER_GREETING, SYSTEM_PROMPT
+from utils.get_place_coordinates import get_place_coordinates
 from utils.validator import validate_vehicle_action
 
 _TASHKEEL_RE = re.compile(r"[\u064B-\u065F\u0670]")
@@ -257,6 +258,99 @@ class Assistant(Agent):
         except Exception as e:
             logger.error(f"Places API error: {e}")
             return "Places search unavailable."
+
+    @function_tool
+    async def change_destination(
+        self,
+        context: RunContext,
+        destination: str,
+    ) -> str:
+        """Start navigation to a destination."""
+
+        if self._current_lang == "ar":
+            wait_message = "حاضر، جارٍ تغيير الوجهة. يُرجى الانتظار قليلًا."
+        else:
+            wait_message = "Okay, I'm changing your destination. Please wait a moment."
+
+        context.session.say(
+            wait_message,
+            add_to_chat_ctx=True,
+        )
+
+        try:
+            # Step 1: Search Google Places
+            place = await get_place_coordinates(destination)
+
+            if place is None:
+                return "I couldn't find the destination you specified. Please check the name or address and try again."
+
+            payload = {
+                "vehicle_id": "vehicle_001",
+                "destination": place["name"],
+                "latitude": place["lat"],
+                "longitude": place["lng"],
+            }
+
+            logger.info(
+                "Navigation payload:\n%s",
+                json.dumps(payload, indent=2, ensure_ascii=False),
+            )
+
+            # Step 2: Call Vehicle API
+            async with httpx2.AsyncClient(timeout=10.0) as client:
+                api_response = await client.post(
+                    f"{VEHICLE_API_URL}/navigation/change",
+                    json=payload,
+                )
+
+            # TODO: Update this flow to wait for the Vehicle API to return whether system accepted or rejected the navigation request.
+
+            if not api_response.is_success:
+                logger.error(api_response.text)
+                return "Navigation service unavailable."
+
+            result = api_response.json()
+
+            if not result.get("success", False):
+                return result.get(
+                    "message",
+                    "Unable to start navigation.",
+                )
+
+            return f"Navigation started to {place['name']}."
+
+        except Exception as e:
+            logger.exception(e)
+            return "Navigation system unavailable."
+
+    @function_tool
+    async def cancel_destination(
+        self,
+        context: RunContext,
+    ) -> str:
+        """Cancel the current navigation."""
+
+        payload = {
+            "vehicle_id": "vehicle_001",
+        }
+
+        logger.info("Cancel Destination")
+
+        try:
+            async with httpx2.AsyncClient(timeout=5.0) as client:
+                response = await client.post(
+                    f"{VEHICLE_API_URL}/navigation/cancel",
+                    json=payload,
+                )
+
+            if response.is_success:
+                return "Navigation cancelled."
+
+            return "Unable to cancel navigation."
+
+        except Exception as e:
+            logger.error(f"Navigation cancel error: {e}")
+            return "Navigation system unavailable."
 
 
 server = AgentServer()
