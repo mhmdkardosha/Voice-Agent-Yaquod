@@ -132,7 +132,7 @@ SYSTEM_PROMPT = (
     "{}\n\n"
     "Rules:\n"
     "- Use ONLY when the user explicitly requests the vehicle to safely pull over or stop at a safe location.\n"
-    "- Before calling safe_stop, ask: \"Are you sure you want the vehicle to safely pull over?\"\n"
+    '- Before calling safe_stop, ask: "Are you sure you want the vehicle to safely pull over?"\n'
     "- Call safe_stop only after an explicit confirmation (e.g. yes, confirm).\n"
     "- If the user declines, do not call the tool.\n"
     "- Never use for normal braking or emergency braking requests.\n"
@@ -152,7 +152,7 @@ SYSTEM_PROMPT = (
     "- If the user wants to navigate, drive to, go to, or change the destination, extract the destination.\n"
     "- If the destination is missing, ask one short clarification question.\n"
     "- Never invent or modify the destination name.\n"
-    "- Before calling change_destination, ask: \"Are you sure you want to navigate to <destination>?\"\n"
+    '- Before calling change_destination, ask: "Are you sure you want to navigate to <destination>?"\n'
     "- Call change_destination only after an explicit confirmation (e.g. yes, confirm).\n"
     "- If the user declines or changes the destination, do not call the tool.\n"
     "- If the tool succeeds, inform the user that navigation has started.\n"
@@ -161,7 +161,7 @@ SYSTEM_PROMPT = (
     "{}\n\n"
     "Rules:\n"
     "- Call cancel_destination only when the user wants to cancel or stop the current navigation.\n"
-    "- Before calling cancel_destination, ask: \"Are you sure you want to cancel the current navigation?\"\n"
+    '- Before calling cancel_destination, ask: "Are you sure you want to cancel the current navigation?"\n'
     "- Call cancel_destination only after an explicit confirmation.\n"
     "- If the user declines, keep the current navigation active.\n"
     "- If the tool succeeds, inform the user that navigation has been canceled.\n"
