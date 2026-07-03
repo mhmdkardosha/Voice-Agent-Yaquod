@@ -11,7 +11,7 @@ async def get_place_coordinates(destination: str) -> dict | None:
     """
     if not GOOGLE_MAPS_API_KEY:
         return None
-    
+
     url = "https://places.googleapis.com/v1/places:searchText"
 
     headers = {
