@@ -23,6 +23,8 @@ from livekit.plugins import azure
 
 from config.constants import ALLOWED_ACTIONS
 from llm.prompts import STARTER_GREETING, SYSTEM_PROMPT
+from utils.get_place_coordinates import get_place_coordinates
+from utils.google_places import search_places_text
 from utils.validator import validate_vehicle_action
 
 _TASHKEEL_RE = re.compile(r"[\u064B-\u065F\u0670]")
@@ -45,7 +47,6 @@ LANGUAGE_CONFIGS = {
 }
 
 DEFAULT_LANG = "ar"
-GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
 VEHICLE_API_URL = "https://yaquod-agent.fastapicloud.dev/api/vehicle"
 
 
@@ -92,6 +93,8 @@ class Assistant(Agent):
         action: str,
         parameters: dict | None = None,
     ) -> str:
+        """Executes a vehicle action via the Vehicle API."""
+
         parameters = parameters or {}
 
         # Safety whitelist check
@@ -197,64 +200,128 @@ class Assistant(Agent):
         radius_meters: int = 1500,
     ) -> str:
         """Search for nearby places using Google Maps Places API."""
-        if not GOOGLE_MAPS_API_KEY:
-            return "Google Maps API key not configured."
-
         location = await self._get_vehicle_location()
         if not location:
             return "Unable to get vehicle location for search."
 
-        lat, lng = location
+        places = await search_places_text(
+            query, location_bias=location, radius_meters=radius_meters
+        )
 
-        url = "https://places.googleapis.com/v1/places:searchText"
-        headers = {
-            "X-Goog-Api-Key": GOOGLE_MAPS_API_KEY,
-            "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.rating,places.currentOpeningHours.openNow",
-            "Content-Type": "application/json",
-        }
-        payload = {
-            "textQuery": query,
-            "locationBias": {
-                "circle": {
-                    "center": {"latitude": lat, "longitude": lng},
-                    "radius": radius_meters,
-                }
-            },
-        }
+        if places is None:
+            return "Places search unavailable."
+        if not places:
+            return f"No results found for '{query}' nearby."
+
+        results = []
+        for place in places[:5]:
+            name = place.get("displayName", {}).get("text", "Unknown")
+            address = place.get("formattedAddress", "No address")
+            rating = place.get("rating", "N/A")
+            open_now = place.get("currentOpeningHours", {}).get("openNow", None)
+            open_status = "Open" if open_now else "Closed" if open_now is not None else ""
+
+            result = f"{name}, {address}"
+            if rating != "N/A":
+                result += f", Rating: {rating}"
+            if open_status:
+                result += f", {open_status}"
+            results.append(result)
+
+        return "Found: " + "; ".join(results)
+
+    @function_tool
+    async def change_destination(
+        self,
+        context: RunContext,
+        destination: str,
+    ) -> str:
+        """Start navigation to a destination."""
+
+        if self._current_lang == "ar":
+            wait_message = "حاضر، جارٍ تغيير الوجهة. يُرجى الانتظار قليلًا."
+        else:
+            wait_message = "Okay, I'm changing your destination. Please wait a moment."
+
+        context.session.say(
+            wait_message,
+            add_to_chat_ctx=True,
+        )
 
         try:
+            # Step 1: Search Google Places
+            place = await get_place_coordinates(destination)
+
+            if place is None:
+                return "I couldn't find the destination you specified. Please check the name or address and try again."
+
+            payload = {
+                "vehicle_id": "vehicle_001",
+                "destination": place["name"],
+                "latitude": place["lat"],
+                "longitude": place["lng"],
+            }
+
+            logger.info(
+                "Navigation payload:\n%s",
+                json.dumps(payload, indent=2, ensure_ascii=False),
+            )
+
+            # Step 2: Call Vehicle API
             async with httpx2.AsyncClient(timeout=10.0) as client:
-                response = await client.post(url, headers=headers, json=payload)
+                api_response = await client.post(
+                    f"{VEHICLE_API_URL}/navigation/change",
+                    json=payload,
+                )
 
-            if response.status_code != 200:
-                return "Places search failed. Please try again."
+            # TODO: Update this flow to wait for the Vehicle API to return whether system accepted or rejected the navigation request.
 
-            data = response.json()
-            places = data.get("places", [])
+            if not api_response.is_success:
+                logger.error(api_response.text)
+                return "Navigation service unavailable."
 
-            if not places:
-                return f"No results found for '{query}' nearby."
+            result = api_response.json()
 
-            results = []
-            for place in places[:5]:
-                name = place.get("displayName", {}).get("text", "Unknown")
-                address = place.get("formattedAddress", "No address")
-                rating = place.get("rating", "N/A")
-                open_now = place.get("currentOpeningHours", {}).get("openNow", None)
-                open_status = "Open" if open_now else "Closed" if open_now is not None else ""
+            if not result.get("success", False):
+                return result.get(
+                    "message",
+                    "Unable to start navigation.",
+                )
 
-                result = f"{name}, {address}"
-                if rating != "N/A":
-                    result += f", Rating: {rating}"
-                if open_status:
-                    result += f", {open_status}"
-                results.append(result)
-
-            return "Found: " + "; ".join(results)
+            return f"Navigation started to {place['name']}."
 
         except Exception as e:
-            logger.error(f"Places API error: {e}")
-            return "Places search unavailable."
+            logger.exception(e)
+            return "Navigation system unavailable."
+
+    @function_tool
+    async def cancel_destination(
+        self,
+        context: RunContext,
+    ) -> str:
+        """Cancel the current navigation."""
+
+        payload = {
+            "vehicle_id": "vehicle_001",
+        }
+
+        logger.info("Cancel Destination")
+
+        try:
+            async with httpx2.AsyncClient(timeout=5.0) as client:
+                response = await client.post(
+                    f"{VEHICLE_API_URL}/navigation/cancel",
+                    json=payload,
+                )
+
+            if response.is_success:
+                return "Navigation cancelled."
+
+            return "Unable to cancel navigation."
+
+        except Exception as e:
+            logger.error(f"Navigation cancel error: {e}")
+            return "Navigation system unavailable."
 
 
 server = AgentServer()

@@ -34,6 +34,8 @@ VALID_PARAMETERS = {
     "window_close": {"window": "all", "percentage": 0},
     "music_play": {},
     "music_pause": {},
+    "next_track": {},
+    "previous_track": {},
     "set_volume": {"change": 5},
     "reading_light_on": {"light": "both"},
     "reading_light_off": {"light": "both"},
@@ -156,27 +158,35 @@ class TestSwitchLanguage:
 
 
 class TestSearchNearbyPlaces:
+    def _mock_location_get(self, mock_client, lat: float, lng: float):
+        mock_client.return_value.__aenter__.return_value.get.return_value = MagicMock(
+            is_success=True,
+            json=lambda: {"vehicle_id": "vehicle_001", "lat": lat, "lng": lng},
+        )
+
     async def test_missing_api_key(self, assistant, mock_context):
-        with patch("agent.GOOGLE_MAPS_API_KEY", ""):
+        with (
+            patch("utils.google_places.GOOGLE_MAPS_API_KEY", ""),
+            patch("httpx2.AsyncClient") as mock_client,
+        ):
+            self._mock_location_get(mock_client, lat=1.0, lng=2.0)
             result = await assistant.search_nearby_places(mock_context, query="coffee")
-        assert "API key not configured" in result
+
+        assert result == "Places search unavailable."
+        # no places request should be attempted without a key
+        mock_client.return_value.__aenter__.return_value.post.assert_not_called()
 
     async def test_location_fetch_fails(self, assistant, mock_context):
         with (
-            patch("agent.GOOGLE_MAPS_API_KEY", "test_key"),
+            patch("utils.google_places.GOOGLE_MAPS_API_KEY", "test_key"),
             patch("httpx2.AsyncClient") as mock_client,
         ):
             mock_client.return_value.__aenter__.return_value.get.side_effect = Exception(
                 "Network error"
             )
             result = await assistant.search_nearby_places(mock_context, query="coffee")
-        assert "Unable to get vehicle location" in result
 
-    def _mock_location_get(self, mock_client, lat: float, lng: float):
-        mock_client.return_value.__aenter__.return_value.get.return_value = MagicMock(
-            is_success=True,
-            json=lambda: {"vehicle_id": "vehicle_001", "lat": lat, "lng": lng},
-        )
+        assert "Unable to get vehicle location" in result
 
     async def test_successful_search_returns_formatted_results(self, assistant, mock_context):
         mock_places_response = {
@@ -196,12 +206,12 @@ class TestSearchNearbyPlaces:
             ]
         }
         with (
-            patch("agent.GOOGLE_MAPS_API_KEY", "test_key"),
+            patch("utils.google_places.GOOGLE_MAPS_API_KEY", "test_key"),
             patch("httpx2.AsyncClient") as mock_client,
         ):
             self._mock_location_get(mock_client, lat=1.0, lng=2.0)
             mock_client.return_value.__aenter__.return_value.post.return_value = MagicMock(
-                status_code=200, json=lambda: mock_places_response
+                is_success=True, json=lambda: mock_places_response
             )
             result = await assistant.search_nearby_places(mock_context, query="coffee")
 
@@ -214,20 +224,23 @@ class TestSearchNearbyPlaces:
     async def test_search_places_api_request_shape(self, assistant, mock_context):
         mock_lat, mock_lng = 1.0, 2.0
         with (
-            patch("agent.GOOGLE_MAPS_API_KEY", "test_key"),
+            patch("utils.google_places.GOOGLE_MAPS_API_KEY", "test_key"),
             patch("httpx2.AsyncClient") as mock_client,
         ):
             self._mock_location_get(mock_client, lat=mock_lat, lng=mock_lng)
             mock_post = mock_client.return_value.__aenter__.return_value.post
-            mock_post.return_value = MagicMock(status_code=200, json=lambda: {"places": []})
+            mock_post.return_value = MagicMock(is_success=True, json=lambda: {"places": []})
             await assistant.search_nearby_places(mock_context, query="coffee")
 
         mock_post.assert_called_once_with(
             "https://places.googleapis.com/v1/places:searchText",
             headers={
-                "X-Goog-Api-Key": "test_key",
-                "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.rating,places.currentOpeningHours.openNow",
                 "Content-Type": "application/json",
+                "X-Goog-Api-Key": "test_key",
+                "X-Goog-FieldMask": (
+                    "places.displayName,places.formattedAddress,places.location,"
+                    "places.rating,places.currentOpeningHours.openNow"
+                ),
             },
             json={
                 "textQuery": "coffee",
@@ -242,27 +255,29 @@ class TestSearchNearbyPlaces:
 
     async def test_no_results_found(self, assistant, mock_context):
         with (
-            patch("agent.GOOGLE_MAPS_API_KEY", "test_key"),
+            patch("utils.google_places.GOOGLE_MAPS_API_KEY", "test_key"),
             patch("httpx2.AsyncClient") as mock_client,
         ):
             self._mock_location_get(mock_client, lat=1.0, lng=2.0)
             mock_client.return_value.__aenter__.return_value.post.return_value = MagicMock(
-                status_code=200, json=lambda: {"places": []}
+                is_success=True, json=lambda: {"places": []}
             )
             result = await assistant.search_nearby_places(mock_context, query="nonexistent")
-        assert "No results found" in result
+
+        assert result == "No results found for 'nonexistent' nearby."
 
     async def test_api_error_returns_graceful_message(self, assistant, mock_context):
         with (
-            patch("agent.GOOGLE_MAPS_API_KEY", "test_key"),
+            patch("utils.google_places.GOOGLE_MAPS_API_KEY", "test_key"),
             patch("httpx2.AsyncClient") as mock_client,
         ):
             self._mock_location_get(mock_client, lat=1.0, lng=2.0)
             mock_client.return_value.__aenter__.return_value.post.return_value = MagicMock(
-                status_code=500
+                is_success=False, status_code=500
             )
             result = await assistant.search_nearby_places(mock_context, query="coffee")
-        assert result == "Places search failed. Please try again."
+
+        assert result == "Places search unavailable."
 
 
 class TestGetWeather:
