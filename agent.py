@@ -24,6 +24,7 @@ from livekit.plugins import azure
 from config.constants import ALLOWED_ACTIONS
 from llm.prompts import STARTER_GREETING, SYSTEM_PROMPT
 from utils.get_place_coordinates import get_place_coordinates
+from utils.google_places import search_places_text
 from utils.validator import validate_vehicle_action
 
 _TASHKEEL_RE = re.compile(r"[\u064B-\u065F\u0670]")
@@ -46,7 +47,6 @@ LANGUAGE_CONFIGS = {
 }
 
 DEFAULT_LANG = "ar"
-GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
 VEHICLE_API_URL = "https://yaquod-agent.fastapicloud.dev/api/vehicle"
 
 
@@ -200,64 +200,35 @@ class Assistant(Agent):
         radius_meters: int = 1500,
     ) -> str:
         """Search for nearby places using Google Maps Places API."""
-        if not GOOGLE_MAPS_API_KEY:
-            return "Google Maps API key not configured."
-
         location = await self._get_vehicle_location()
         if not location:
             return "Unable to get vehicle location for search."
 
-        lat, lng = location
+        places = await search_places_text(
+            query, location_bias=location, radius_meters=radius_meters
+        )
 
-        url = "https://places.googleapis.com/v1/places:searchText"
-        headers = {
-            "X-Goog-Api-Key": GOOGLE_MAPS_API_KEY,
-            "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.rating,places.currentOpeningHours.openNow",
-            "Content-Type": "application/json",
-        }
-        payload = {
-            "textQuery": query,
-            "locationBias": {
-                "circle": {
-                    "center": {"latitude": lat, "longitude": lng},
-                    "radius": radius_meters,
-                }
-            },
-        }
-
-        try:
-            async with httpx2.AsyncClient(timeout=10.0) as client:
-                response = await client.post(url, headers=headers, json=payload)
-
-            if response.status_code != 200:
-                return "Places search failed. Please try again."
-
-            data = response.json()
-            places = data.get("places", [])
-
-            if not places:
-                return f"No results found for '{query}' nearby."
-
-            results = []
-            for place in places[:5]:
-                name = place.get("displayName", {}).get("text", "Unknown")
-                address = place.get("formattedAddress", "No address")
-                rating = place.get("rating", "N/A")
-                open_now = place.get("currentOpeningHours", {}).get("openNow", None)
-                open_status = "Open" if open_now else "Closed" if open_now is not None else ""
-
-                result = f"{name}, {address}"
-                if rating != "N/A":
-                    result += f", Rating: {rating}"
-                if open_status:
-                    result += f", {open_status}"
-                results.append(result)
-
-            return "Found: " + "; ".join(results)
-
-        except Exception as e:
-            logger.error(f"Places API error: {e}")
+        if places is None:
             return "Places search unavailable."
+        if not places:
+            return f"No results found for '{query}' nearby."
+
+        results = []
+        for place in places[:5]:
+            name = place.get("displayName", {}).get("text", "Unknown")
+            address = place.get("formattedAddress", "No address")
+            rating = place.get("rating", "N/A")
+            open_now = place.get("currentOpeningHours", {}).get("openNow", None)
+            open_status = "Open" if open_now else "Closed" if open_now is not None else ""
+
+            result = f"{name}, {address}"
+            if rating != "N/A":
+                result += f", Rating: {rating}"
+            if open_status:
+                result += f", {open_status}"
+            results.append(result)
+
+        return "Found: " + "; ".join(results)
 
     @function_tool
     async def change_destination(
