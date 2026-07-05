@@ -17,12 +17,10 @@ async def publish_event(event: dict):
 
 
 async def publish(name: str, model):
-    await publish_event(
-        {
-            "event": name,
-            "data": model.model_dump(),
-        }
-    )
+    await publish_event({
+        "event": name,
+        "data": model.model_dump(),
+    })
 
 
 async def redis_listener(manager):
@@ -62,9 +60,7 @@ async def startup_redis(redis_url: str, manager):
 
     await redis_client.ping()
 
-    _listener_task = asyncio.create_task(
-        redis_listener(manager)
-    )
+    _listener_task = asyncio.create_task(redis_listener(manager))
 
 
 async def shutdown_redis():

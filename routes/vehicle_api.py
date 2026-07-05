@@ -3,17 +3,16 @@ import os
 import secrets
 from contextlib import asynccontextmanager
 
-from utils.redis_pubsub import (
-    publish,
-    shutdown_redis,
-    startup_redis,
-)
-
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 
 from routes.models.navigation_models import CancelDestination, ChangeDestination
 from routes.models.vehicle_action_model import VehicleAction, VehicleLocation
+from utils.redis_pubsub import (
+    publish,
+    shutdown_redis,
+    startup_redis,
+)
 
 load_dotenv()
 
@@ -26,9 +25,7 @@ if not API_KEY:
 
 REDIS_URL = os.getenv("REDIS_URL")
 if not REDIS_URL:
-    raise RuntimeError(
-        "REDIS_URL environment variable is not set. "
-    )
+    raise RuntimeError("REDIS_URL environment variable is not set. ")
 
 # Default test location (Cairo, Egypt) - replace with real GPS in production
 _DEFAULT_LOCATION = VehicleLocation(vehicle_id="vehicle_001", lat=30.0444, lng=31.2357)
@@ -63,6 +60,7 @@ class ConnectionManager:
 
 
 manager = ConnectionManager()
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
