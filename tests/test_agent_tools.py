@@ -290,7 +290,7 @@ class TestSearchWeb:
                 "url": "https://python.org",
             },
         ]
-        with patch("agent.search_web", return_value=mock_results):
+        with patch("agent.search_web_util", return_value=mock_results):
             result = await assistant.search_web(mock_context, query="AI companies")
 
         assert "Search results:" in result
@@ -299,13 +299,13 @@ class TestSearchWeb:
         assert "Python" in result
 
     async def test_missing_api_key(self, assistant, mock_context):
-        with patch("agent.search_web", return_value=None):
+        with patch("agent.search_web_util", return_value=None):
             result = await assistant.search_web(mock_context, query="test")
 
         assert result == "Web search is not configured or unavailable."
 
     async def test_no_results_found(self, assistant, mock_context):
-        with patch("agent.search_web", return_value=[]):
+        with patch("agent.search_web_util", return_value=[]):
             result = await assistant.search_web(mock_context, query="xyznonexistent")
 
         assert "No search results found" in result
@@ -314,14 +314,14 @@ class TestSearchWeb:
         mock_results = [
             {"title": "Only Title", "description": "", "url": "https://example.com"},
         ]
-        with patch("agent.search_web", return_value=mock_results):
+        with patch("agent.search_web_util", return_value=mock_results):
             result = await assistant.search_web(mock_context, query="test")
 
         assert "Only Title" in result
         assert "Search results:" in result
 
     async def test_passes_current_language_as_search_lang(self, assistant, mock_context):
-        with patch("agent.search_web", return_value=[]) as mock_fn:
+        with patch("agent.search_web_util", return_value=[]) as mock_fn:
             await assistant.search_web(mock_context, query="test")
 
         mock_fn.assert_called_once_with("test", search_lang="ar")

@@ -26,7 +26,7 @@ from llm.prompts import STARTER_GREETING, SYSTEM_PROMPT
 from utils.get_place_coordinates import get_place_coordinates
 from utils.google_places import search_places_text
 from utils.validator import validate_vehicle_action
-from utils.web_search import search_web
+from utils.web_search import search_web as search_web_util
 
 _TASHKEEL_RE = re.compile(r"[\u064B-\u065F\u0670]")
 
@@ -248,7 +248,18 @@ class Assistant(Agent):
         """Search the web for up-to-date information using Brave Search."""
 
         search_lang = "ar" if self._current_lang == "ar" else "en"
-        results = await search_web(query, search_lang=search_lang)
+
+        if self._current_lang == "ar":
+            wait_message = "جاري البحث على الإنترنت. يُرجى الانتظار قليلًا."
+        else:
+            wait_message = "Searching the web. Please wait a moment."
+
+        context.session.say(
+            wait_message,
+            add_to_chat_ctx=True,
+        )
+
+        results = await search_web_util(query, search_lang=search_lang)
 
         if results is None:
             return "Web search is not configured or unavailable."
