@@ -14,6 +14,7 @@ dependencies = [
     "livekit-plugins-silero",
     "livekit-plugins-turn-detector",
     "llama-index",
+    "redis"
 ]
 
 [project.optional-dependencies]
