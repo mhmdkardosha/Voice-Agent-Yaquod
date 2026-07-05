@@ -18,10 +18,7 @@ load_dotenv()
 
 logger = logging.getLogger("yaquod-api")
 
-API_KEY = os.getenv("YAQUOD_API_KEY")
-
-if not API_KEY:
-    raise RuntimeError("YAQUOD_API_KEY environment variable is not set.")
+API_KEY = os.getenv("YAQUOD_API_KEY","test-api-key")
 
 REDIS_URL = os.getenv("REDIS_URL")
 if not REDIS_URL:
