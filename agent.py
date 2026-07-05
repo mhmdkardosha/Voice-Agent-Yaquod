@@ -247,7 +247,8 @@ class Assistant(Agent):
     ) -> str:
         """Search the web for up-to-date information using Brave Search."""
 
-        results = await search_web(query)
+        search_lang = "ar" if self._current_lang == "ar" else "en"
+        results = await search_web(query, search_lang=search_lang)
 
         if results is None:
             return "Web search is not configured or unavailable."

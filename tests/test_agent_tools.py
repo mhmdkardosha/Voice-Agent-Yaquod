@@ -320,6 +320,12 @@ class TestSearchWeb:
         assert "Only Title" in result
         assert "Search results:" in result
 
+    async def test_passes_current_language_as_search_lang(self, assistant, mock_context):
+        with patch("agent.search_web", return_value=[]) as mock_fn:
+            await assistant.search_web(mock_context, query="test")
+
+        mock_fn.assert_called_once_with("test", search_lang="ar")
+
 
 class TestGetWeather:
     def _mock_location_success(self, mock_client, lat: float, lng: float):
