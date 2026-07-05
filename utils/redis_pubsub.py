@@ -47,7 +47,7 @@ async def redis_listener(manager):
         pass
     finally:
         await pubsub.unsubscribe(REDIS_CHANNEL)
-        await pubsub.close()
+        await pubsub.aclose()
 
 
 async def startup_redis(redis_url: str, manager):
@@ -72,4 +72,4 @@ async def shutdown_redis():
         )
 
     if redis_client:
-        await redis_client.close()
+        await redis_client.aclose()
