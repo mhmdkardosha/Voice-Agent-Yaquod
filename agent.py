@@ -50,6 +50,17 @@ LANGUAGE_CONFIGS = {
 DEFAULT_LANG = "ar"
 VEHICLE_API_URL = "https://yaquod-agent.fastapicloud.dev/api/vehicle"
 
+_WAIT_MESSAGES: dict[str, dict[str, str]] = {
+    "ar": {
+        "search_web": "جاري البحث على الإنترنت. يُرجى الانتظار قليلًا.",
+        "change_destination": "حاضر، جارٍ تغيير الوجهة. يُرجى الانتظار قليلًا.",
+    },
+    "en": {
+        "search_web": "Searching the web. Please wait a moment.",
+        "change_destination": "Okay, I'm changing your destination. Please wait a moment.",
+    },
+}
+
 
 class Assistant(Agent):
     def __init__(self) -> None:
@@ -249,13 +260,8 @@ class Assistant(Agent):
 
         search_lang = "ar" if self._current_lang == "ar" else "en"
 
-        if self._current_lang == "ar":
-            wait_message = "جاري البحث على الإنترنت. يُرجى الانتظار قليلًا."
-        else:
-            wait_message = "Searching the web. Please wait a moment."
-
         context.session.say(
-            wait_message,
+            _WAIT_MESSAGES[search_lang]["search_web"],
             add_to_chat_ctx=True,
         )
 
@@ -287,13 +293,9 @@ class Assistant(Agent):
     ) -> str:
         """Start navigation to a destination."""
 
-        if self._current_lang == "ar":
-            wait_message = "حاضر، جارٍ تغيير الوجهة. يُرجى الانتظار قليلًا."
-        else:
-            wait_message = "Okay, I'm changing your destination. Please wait a moment."
-
+        lang = "ar" if self._current_lang == "ar" else "en"
         context.session.say(
-            wait_message,
+            _WAIT_MESSAGES[lang]["change_destination"],
             add_to_chat_ctx=True,
         )
 
