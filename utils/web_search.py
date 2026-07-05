@@ -14,7 +14,6 @@ async def search_web(
     query: str,
     count: int = 5,
     timeout: float = 10.0,
-    country: str = "EG",
     search_lang: str | None = None,
 ) -> list[dict] | None:
     if not BRAVE_SEARCH_API_KEY:
@@ -26,7 +25,7 @@ async def search_web(
         "Accept-Encoding": "gzip",
         "X-Subscription-Token": BRAVE_SEARCH_API_KEY,
     }
-    params = {"q": query, "count": str(count), "country": country}
+    params: dict[str, str] = {"q": query, "count": str(count)}
     if search_lang:
         params["search_lang"] = search_lang
 

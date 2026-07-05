@@ -173,6 +173,8 @@ SYSTEM_PROMPT = (
     "  or any knowledge not covered by your training (e.g. news, specific data,\n"
     "  addresses, phone numbers, current events).\n"
     "- Keep search queries concise and keyword-focused.\n"
+    "- ALWAYS bias results toward Egypt. Unless the user explicitly specifies\n"
+    "  another country, append \" in Egypt\" or \" في مصر\" to your query.\n"
     "- When you use search results, mention the source naturally in your response.\n"
     "</web_search>\n\n"
     "<tone>\n"
