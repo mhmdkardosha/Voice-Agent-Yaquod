@@ -49,6 +49,9 @@ VALID_PARAMETERS = {
     "window_unlock": {},
 }
 
+HEADERS = {
+    "API-Key": os.environ["YAQUOD_API_KEY"],
+}
 
 class TestVehicleAction:
     async def test_allowed_action_returns_success(self, assistant, mock_context):
@@ -73,12 +76,13 @@ class TestVehicleAction:
             )
 
         mock_post.assert_called_once_with(
-            "https://yaquod-agent.fastapicloud.dev/api/vehicle/action",
+            "https://yaquod.fastapicloud.dev/vehicle/action",
             json={
                 "vehicle_id": "vehicle_001",
                 "action": "set_fan_speed",
                 "parameters": {"speed": 3},
             },
+            headers=HEADERS,
         )
 
     async def test_disallowed_action_is_rejected(self, assistant, mock_context):
@@ -120,8 +124,9 @@ class TestVehicleAction:
             await assistant.vehicle_action(mock_context, action="ac_on", parameters=None)
 
         mock_post.assert_called_once_with(
-            "https://yaquod-agent.fastapicloud.dev/api/vehicle/action",
+            "https://yaquod.fastapicloud.dev/vehicle/action",
             json={"vehicle_id": "vehicle_001", "action": "ac_on", "parameters": {}},
+            headers=HEADERS,
         )
 
     async def test_all_allowed_actions_are_accepted(self, assistant, mock_context):

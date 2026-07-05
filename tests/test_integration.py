@@ -2,6 +2,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from urllib.parse import urlparse
 
 import pytest
+import os
 
 pytest.importorskip("livekit")
 
@@ -12,6 +13,9 @@ from routes.vehicle_api import app as fastapi_app
 
 pytestmark = pytest.mark.asyncio
 
+HEADERS = {
+    "API-Key": os.environ["YAQUOD_API_KEY"],
+}
 
 @pytest.fixture
 def api_client():
@@ -28,7 +32,12 @@ def _make_httpx_router(api_client):
 
     async def _fake_post(url, **kwargs):
         path = urlparse(url).path
-        raw = api_client.post(path, json=kwargs.get("json"))
+        with patch("routes.vehicle_api.publish", new=AsyncMock()):
+            raw = api_client.post(
+                path,
+                json=kwargs.get("json"),
+                headers=kwargs.get("headers"),
+            )
         response = MagicMock()
         response.is_success = 200 <= raw.status_code < 300
         return response
@@ -50,6 +59,7 @@ async def test_api_receives_correct_action(api_client, mock_context):
 
     assert result == "Executed music_play"
     mock_httpx.return_value.__aenter__.return_value.post.assert_called_once_with(
-        "https://yaquod-agent.fastapicloud.dev/api/vehicle/action",
+        "https://yaquod.fastapicloud.dev/vehicle/action",
         json={"vehicle_id": "vehicle_001", "action": "music_play", "parameters": {}},
+        headers=HEADERS
     )
