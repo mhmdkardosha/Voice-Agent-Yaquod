@@ -26,6 +26,7 @@ from llm.prompts import STARTER_GREETING, SYSTEM_PROMPT
 from utils.get_place_coordinates import get_place_coordinates
 from utils.google_places import search_places_text
 from utils.validator import validate_vehicle_action
+from utils.web_search import search_web
 
 _TASHKEEL_RE = re.compile(r"[\u064B-\u065F\u0670]")
 
@@ -37,9 +38,9 @@ def _strip_tashkeel(text: str) -> str:
 logger = logging.getLogger("yaquod-agent")
 
 _ARABIC_VOICE = (
-    "f786b574-daa5-4673-aa0c-cbe3e8534c02"  # Katie (Cartesia default) — multilingual, works with ar
+    "fc923f89-1de5-4ddf-b93c-6da2ba63428a"  # Katie (Cartesia default) — multilingual, works with ar
 )
-_ENGLISH_VOICE = "9626c31c-bec5-4cca-baa8-f8ba9e84c8bc"  # Jacqueline — en-US female
+_ENGLISH_VOICE = "273f9ef7-9fc2-4def-88bb-ab108c6249ca"  # Jacqueline — en-US female
 
 LANGUAGE_CONFIGS = {
     "ar": {"stt_lang": "ar", "tts_lang": "ar", "voice_id": _ARABIC_VOICE},
@@ -81,6 +82,14 @@ class Assistant(Agent):
             voice=config["voice_id"],
             language=config["tts_lang"],
         )
+
+        # Invalidate the TTS WebSocket connection pool so the next
+        # SynthesizeStream creates a new connection with the updated
+        # voice/language in session.create. The old pool connection
+        # keeps the previous language's voice.
+        pool = getattr(session.tts, "_pool", None)
+        if pool is not None and hasattr(pool, "invalidate"):
+            pool.invalidate()
 
         self._current_lang = language
 
@@ -231,6 +240,34 @@ class Assistant(Agent):
         return "Found: " + "; ".join(results)
 
     @function_tool
+    async def search_web(
+        self,
+        context: RunContext,
+        query: str,
+    ) -> str:
+        """Search the web for up-to-date information using Brave Search."""
+
+        results = await search_web(query)
+
+        if results is None:
+            return "Web search is not configured or unavailable."
+        if not results:
+            return f"No search results found for '{query}'."
+
+        lines = []
+        for i, r in enumerate(results, 1):
+            snippet = r.get("description", "").strip()
+            title = r.get("title", "").strip()
+            if title and snippet:
+                lines.append(f"{i}. {title} — {snippet}")
+            elif title:
+                lines.append(f"{i}. {title}")
+            else:
+                lines.append(f"{i}. {snippet}")
+
+        return "Search results: " + " | ".join(lines)
+
+    @function_tool
     async def change_destination(
         self,
         context: RunContext,
@@ -337,7 +374,7 @@ async def my_agent(ctx: agents.JobContext):
         ),
         llm=inference.LLM(model="google/gemini-3.1-flash-lite"),
         tts=inference.TTS(
-            model="cartesia/sonic-3",
+            model="cartesia/sonic-3.5",
             voice=default_config["voice_id"],
             language=default_config["tts_lang"],
         ),
