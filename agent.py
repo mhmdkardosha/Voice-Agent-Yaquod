@@ -53,6 +53,7 @@ API_HEADERS = {
     "API-Key": API_KEY,
 }
 
+
 class Assistant(Agent):
     def __init__(self) -> None:
         super().__init__(instructions=SYSTEM_PROMPT)
