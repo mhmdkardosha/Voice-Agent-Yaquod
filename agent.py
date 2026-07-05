@@ -47,8 +47,11 @@ LANGUAGE_CONFIGS = {
 }
 
 DEFAULT_LANG = "ar"
-VEHICLE_API_URL = "https://yaquod-agent.fastapicloud.dev/api/vehicle"
-
+VEHICLE_API_URL = "http://127.0.0.1:8000/vehicle"
+API_KEY = os.getenv("YAQUOD_API_KEY")
+API_HEADERS = {
+    "API-Key": API_KEY,
+}
 
 class Assistant(Agent):
     def __init__(self) -> None:
@@ -116,6 +119,7 @@ class Assistant(Agent):
                 response = await client.post(
                     f"{VEHICLE_API_URL}/action",
                     json=payload,
+                    headers=API_HEADERS,
                 )
 
             if response.is_success:
@@ -183,6 +187,7 @@ class Assistant(Agent):
                 response = await client.get(
                     f"{VEHICLE_API_URL}/location",
                     timeout=5.0,
+                    headers=API_HEADERS,
                 )
                 if response.is_success:
                     data = response.json()
@@ -272,6 +277,7 @@ class Assistant(Agent):
                 api_response = await client.post(
                     f"{VEHICLE_API_URL}/navigation/change",
                     json=payload,
+                    headers=API_HEADERS,
                 )
 
             # TODO: Update this flow to wait for the Vehicle API to return whether system accepted or rejected the navigation request.
@@ -312,6 +318,7 @@ class Assistant(Agent):
                 response = await client.post(
                     f"{VEHICLE_API_URL}/navigation/cancel",
                     json=payload,
+                    headers=API_HEADERS,
                 )
 
             if response.is_success:
