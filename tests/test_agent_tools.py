@@ -53,6 +53,7 @@ HEADERS = {
     "API-Key": os.environ["YAQUOD_API_KEY"],
 }
 
+
 class TestVehicleAction:
     async def test_allowed_action_returns_success(self, assistant, mock_context):
         with patch("httpx2.AsyncClient") as mock_client:

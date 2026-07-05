@@ -1,8 +1,8 @@
+import os
 from unittest.mock import AsyncMock, MagicMock, patch
 from urllib.parse import urlparse
 
 import pytest
-import os
 
 pytest.importorskip("livekit")
 
@@ -16,6 +16,7 @@ pytestmark = pytest.mark.asyncio
 HEADERS = {
     "API-Key": os.environ["YAQUOD_API_KEY"],
 }
+
 
 @pytest.fixture
 def api_client():
@@ -61,5 +62,5 @@ async def test_api_receives_correct_action(api_client, mock_context):
     mock_httpx.return_value.__aenter__.return_value.post.assert_called_once_with(
         "https://yaquod.fastapicloud.dev/vehicle/action",
         json={"vehicle_id": "vehicle_001", "action": "music_play", "parameters": {}},
-        headers=HEADERS
+        headers=HEADERS,
     )

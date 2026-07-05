@@ -18,7 +18,7 @@ load_dotenv()
 
 logger = logging.getLogger("yaquod-api")
 
-API_KEY = os.getenv("YAQUOD_API_KEY","test-api-key")
+API_KEY = os.getenv("YAQUOD_API_KEY", "test-api-key")
 
 REDIS_URL = os.getenv("REDIS_URL")
 if not REDIS_URL:

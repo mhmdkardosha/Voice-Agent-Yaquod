@@ -1,9 +1,9 @@
+import os
+from unittest.mock import AsyncMock, patch
+
 from fastapi.testclient import TestClient
 
 from routes.vehicle_api import _DEFAULT_LOCATION, app
-
-import os
-from unittest.mock import AsyncMock, patch
 
 HEADERS = {
     "API-Key": os.environ["YAQUOD_API_KEY"],
