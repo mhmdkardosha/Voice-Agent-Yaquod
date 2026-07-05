@@ -47,7 +47,7 @@ LANGUAGE_CONFIGS = {
 }
 
 DEFAULT_LANG = "ar"
-VEHICLE_API_URL = "http://127.0.0.1:8000/vehicle"
+VEHICLE_API_URL = "https://yaquod.fastapicloud.dev/vehicle"
 API_KEY = os.getenv("YAQUOD_API_KEY")
 API_HEADERS = {
     "API-Key": API_KEY,
