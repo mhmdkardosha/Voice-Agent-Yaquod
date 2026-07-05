@@ -18,11 +18,9 @@ load_dotenv()
 
 logger = logging.getLogger("yaquod-api")
 
-API_KEY = os.getenv("YAQUOD_API_KEY", "test-api-key")
+API_KEY = os.environ["YAQUOD_API_KEY"]
 
-REDIS_URL = os.getenv("REDIS_URL")
-if not REDIS_URL:
-    raise RuntimeError("REDIS_URL environment variable is not set. ")
+REDIS_URL = os.environ["REDIS_URL"]
 
 # Default test location (Cairo, Egypt) - replace with real GPS in production
 _DEFAULT_LOCATION = VehicleLocation(vehicle_id="vehicle_001", lat=30.0444, lng=31.2357)
