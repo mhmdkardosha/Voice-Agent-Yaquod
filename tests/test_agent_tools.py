@@ -280,6 +280,53 @@ class TestSearchNearbyPlaces:
         assert result == "Places search unavailable."
 
 
+class TestSearchWeb:
+    async def test_successful_search_returns_formatted_results(self, assistant, mock_context):
+        mock_results = [
+            {"title": "OpenAI", "description": "AI research company.", "url": "https://openai.com"},
+            {
+                "title": "Python",
+                "description": "Programming language.",
+                "url": "https://python.org",
+            },
+        ]
+        with patch("agent.search_web_util", return_value=mock_results):
+            result = await assistant.search_web(mock_context, query="AI companies")
+
+        assert "Search results:" in result
+        assert "OpenAI" in result
+        assert "AI research company" in result
+        assert "Python" in result
+
+    async def test_missing_api_key(self, assistant, mock_context):
+        with patch("agent.search_web_util", return_value=None):
+            result = await assistant.search_web(mock_context, query="test")
+
+        assert result == "Web search is not configured or unavailable."
+
+    async def test_no_results_found(self, assistant, mock_context):
+        with patch("agent.search_web_util", return_value=[]):
+            result = await assistant.search_web(mock_context, query="xyznonexistent")
+
+        assert "No search results found" in result
+
+    async def test_result_without_description(self, assistant, mock_context):
+        mock_results = [
+            {"title": "Only Title", "description": "", "url": "https://example.com"},
+        ]
+        with patch("agent.search_web_util", return_value=mock_results):
+            result = await assistant.search_web(mock_context, query="test")
+
+        assert "Only Title" in result
+        assert "Search results:" in result
+
+    async def test_passes_current_language_as_search_lang(self, assistant, mock_context):
+        with patch("agent.search_web_util", return_value=[]) as mock_fn:
+            await assistant.search_web(mock_context, query="test")
+
+        mock_fn.assert_called_once_with("test", search_lang="ar")
+
+
 class TestGetWeather:
     def _mock_location_success(self, mock_client, lat: float, lng: float):
         mock_client.return_value.__aenter__.return_value.get.return_value = MagicMock(
