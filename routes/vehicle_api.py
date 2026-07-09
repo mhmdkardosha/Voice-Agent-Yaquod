@@ -40,7 +40,6 @@ _DEFAULT_LOCATION = VehicleLocation(vehicle_id="vehicle_001", lat=30.0444, lng=3
 
 
 app = FastAPI(lifespan=lifespan)
-fast_mqtt.init_app(app)
 
 
 async def publish(topic: str, payload: str) -> bool:
