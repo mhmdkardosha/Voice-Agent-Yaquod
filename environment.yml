@@ -21,3 +21,4 @@ dependencies:
       - httpx2
       - uvicorn
       - redis
+      - aiomqtt
