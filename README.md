@@ -13,6 +13,7 @@ A bilingual (Arabic/English) real-time voice AI assistant powered by **LiveKit A
 - **Multilingual turn detection** for natural conversation flow
 - **MQTT vehicle communication** — real-time vehicle control and telemetry via MQTT broker
 - **Nearby Places Search** — find restaurants, gas stations, hospitals, and more using Google Maps Places API
+- **Web Search** — search the web for any information via Brave Search API
 - **Weather lookup** through WeatherAPI.com
 - **Allowed-action whitelist** for vehicle controls to enforce safety
 
@@ -55,6 +56,7 @@ A bilingual (Arabic/English) real-time voice AI assistant powered by **LiveKit A
    | `MQTT_PORT` | MQTT broker port (e.g. `1883`) |
    | `MQTT_USERNAME` | MQTT broker username (optional) |
    | `MQTT_PASSWORD` | MQTT broker password (optional) |
+   | `BRAVE_SEARCH_API_KEY` | Brave Search API key (required for web search) — get one free at https://api.search.brave.com |
 
 3. **Run the agent:**
 
@@ -76,6 +78,14 @@ The agent communicates with the vehicle via MQTT. Here are the available topics:
 
 **Allowed Actions:**
 `ac_on`, `ac_off`, `set_temperature`, `set_fan_speed`, `set_airflow_mode`, `climate_auto`, `climate_sync`, `window_open`, `window_close`, `window_lock`, `window_unlock`, `music_play`, `music_pause`, `set_volume`, `next_track`, `previous_track`, `reading_light_on`, `reading_light_off`, `change_destination`, `cancel_destination`, `safe_stop`, `seat_position`, `seat_recline`, `seat_height`
+### Getting a Brave Search API Key
+
+The agent uses **Brave Search API** to fetch real-time web information.
+
+1. Go to [api.search.brave.com](https://api.search.brave.com/app) and create a free account.
+2. Navigate to the **API Keys** section.
+3. Create a new key and copy it into your `.env` as `BRAVE_SEARCH_API_KEY`.
+4. The free tier provides up to 2,000 queries/month — sufficient for typical usage.
 
 ### Getting a Weather API Key
 
