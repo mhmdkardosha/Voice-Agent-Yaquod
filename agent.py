@@ -1,9 +1,18 @@
+import sys
+import asyncio
+
+# Add this to fix the Windows aiomqtt NotImplementedError
+if sys.platform.startswith('win'):
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    
 import json
 import logging
 import os
 import re
+import ssl
 from collections.abc import AsyncGenerator, AsyncIterable
 
+import aiomqtt
 import httpx2
 from dotenv import load_dotenv
 
@@ -48,11 +57,9 @@ LANGUAGE_CONFIGS = {
 }
 
 DEFAULT_LANG = "ar"
-VEHICLE_API_URL = "https://yaquod.fastapicloud.dev/vehicle"
-API_KEY = os.environ["YAQUOD_API_KEY"]
-API_HEADERS = {
-    "API-Key": API_KEY,
-}
+
+# Default test location (Cairo, Egypt) - Replace with MQTT subscription data in production
+_DEFAULT_LOCATION = (30.0444, 31.2357)
 
 _WAIT_MESSAGES: dict[str, dict[str, str]] = {
     "ar": {
@@ -67,9 +74,10 @@ _WAIT_MESSAGES: dict[str, dict[str, str]] = {
 
 
 class Assistant(Agent):
-    def __init__(self) -> None:
+    def __init__(self, mqtt_client: aiomqtt.Client) -> None:
         super().__init__(instructions=SYSTEM_PROMPT)
         self._current_lang = DEFAULT_LANG
+        self.mqtt_client = mqtt_client
 
     async def transcription_node(
         self, text: AsyncIterable[str], model_settings: object
@@ -98,10 +106,7 @@ class Assistant(Agent):
             language=config["tts_lang"],
         )
 
-        # Invalidate the TTS WebSocket connection pool so the next
-        # SynthesizeStream creates a new connection with the updated
-        # voice/language in session.create. The old pool connection
-        # keeps the previous language's voice.
+
         pool = getattr(session.tts, "_pool", None)
         if pool is not None and hasattr(pool, "invalidate"):
             pool.invalidate()
@@ -117,8 +122,7 @@ class Assistant(Agent):
         action: str,
         parameters: dict | None = None,
     ) -> str:
-        """Executes a vehicle action via the Vehicle API."""
-
+        """Executes a vehicle action directly via MQTT."""
         parameters = parameters or {}
 
         # Safety whitelist check
@@ -131,25 +135,17 @@ class Assistant(Agent):
         if error:
             return error
 
-        payload = {"vehicle_id": "vehicle_001", "action": action, "parameters": parameters}
+        vehicle_id = "vehicle_001"
+        payload = {"vehicle_id": vehicle_id, "action": action, "parameters": parameters}
+        topic = f"vehicle/{vehicle_id}/action"
 
-        logger.info("Vehicle Action:\n%s", json.dumps(payload, indent=2))
+        logger.info("Publishing Vehicle Action to %s:\n%s", topic, json.dumps(payload, indent=2))
 
         try:
-            async with httpx2.AsyncClient(timeout=5.0) as client:
-                response = await client.post(
-                    f"{VEHICLE_API_URL}/action",
-                    json=payload,
-                    headers=API_HEADERS,
-                )
-
-            if response.is_success:
-                return f"Executed {action}"
-            else:
-                return "Vehicle API error"
-
+            await self.mqtt_client.publish(topic, json.dumps(payload))
+            return f"Executed {action}"
         except Exception as e:
-            logger.error(f"API error: {e}")
+            logger.error(f"MQTT publish error: {e}")
             return "Vehicle system unavailable"
 
     @function_tool
@@ -202,21 +198,12 @@ class Assistant(Agent):
             return "Weather system unavailable."
 
     async def _get_vehicle_location(self) -> tuple[float, float] | None:
-        """Fetch current vehicle location from the vehicle API."""
-        try:
-            async with httpx2.AsyncClient() as client:
-                response = await client.get(
-                    f"{VEHICLE_API_URL}/location",
-                    timeout=5.0,
-                    headers=API_HEADERS,
-                )
-                if response.is_success:
-                    data = response.json()
-                    return data["lat"], data["lng"]
-                return None
-        except Exception as e:
-            logger.error(f"Location fetch error: {e}")
-            return None
+        """
+        Returns the vehicle location.
+        Note: Currently uses a static default. To make this dynamic, 
+        you can subscribe to your MQTT location topic in a background task.
+        """
+        return _DEFAULT_LOCATION
 
     @function_tool
     async def search_nearby_places(
@@ -297,8 +284,7 @@ class Assistant(Agent):
         context: RunContext,
         destination: str,
     ) -> str:
-        """Start navigation to a destination."""
-
+        """Start navigation to a destination via direct MQTT publish."""
         lang = "ar" if self._current_lang == "ar" else "en"
         context.session.say(
             _WAIT_MESSAGES[lang]["change_destination"],
@@ -312,40 +298,19 @@ class Assistant(Agent):
             if place is None:
                 return "I couldn't find the destination you specified. Please check the name or address and try again."
 
+            vehicle_id = "vehicle_001"
             payload = {
-                "vehicle_id": "vehicle_001",
+                "vehicle_id": vehicle_id,
                 "destination": place["name"],
                 "latitude": place["lat"],
                 "longitude": place["lng"],
             }
+            topic = f"vehicle/{vehicle_id}/navigation/change"
 
-            logger.info(
-                "Navigation payload:\n%s",
-                json.dumps(payload, indent=2, ensure_ascii=False),
-            )
-
-            # Step 2: Call Vehicle API
-            async with httpx2.AsyncClient(timeout=10.0) as client:
-                api_response = await client.post(
-                    f"{VEHICLE_API_URL}/navigation/change",
-                    json=payload,
-                    headers=API_HEADERS,
-                )
-
-            # TODO: Update this flow to wait for the Vehicle API to return whether system accepted or rejected the navigation request.
-
-            if not api_response.is_success:
-                logger.error(api_response.text)
-                return "Navigation service unavailable."
-
-            result = api_response.json()
-
-            if not result.get("success", False):
-                return result.get(
-                    "message",
-                    "Unable to start navigation.",
-                )
-
+            logger.info("Publishing Navigation Change to %s:\n%s", topic, json.dumps(payload))
+            
+            # Step 2: Publish to MQTT
+            await self.mqtt_client.publish(topic, json.dumps(payload))
             return f"Navigation started to {place['name']}."
 
         except Exception as e:
@@ -357,27 +322,15 @@ class Assistant(Agent):
         self,
         context: RunContext,
     ) -> str:
-        """Cancel the current navigation."""
-
-        payload = {
-            "vehicle_id": "vehicle_001",
-        }
-
-        logger.info("Cancel Destination")
+        """Cancel the current navigation via direct MQTT publish."""
+        vehicle_id = "vehicle_001"
+        payload = {"vehicle_id": vehicle_id}
+        topic = f"vehicle/{vehicle_id}/navigation/cancel"
 
         try:
-            async with httpx2.AsyncClient(timeout=5.0) as client:
-                response = await client.post(
-                    f"{VEHICLE_API_URL}/navigation/cancel",
-                    json=payload,
-                    headers=API_HEADERS,
-                )
-
-            if response.is_success:
-                return "Navigation cancelled."
-
-            return "Unable to cancel navigation."
-
+            logger.info("Publishing Cancel Navigation to %s", topic)
+            await self.mqtt_client.publish(topic, json.dumps(payload))
+            return "Navigation cancelled."
         except Exception as e:
             logger.error(f"Navigation cancel error: {e}")
             return "Navigation system unavailable."
@@ -390,23 +343,48 @@ server = AgentServer()
 async def my_agent(ctx: agents.JobContext):
     default_config = LANGUAGE_CONFIGS[DEFAULT_LANG]
 
-    session = AgentSession(
-        stt=azure.STT(
-            language=["ar-EG", "en-US"],
-        ),
-        llm=inference.LLM(model="google/gemini-3.1-flash-lite"),
-        tts=inference.TTS(
-            model="cartesia/sonic-3.5",
-            voice=default_config["voice_id"],
-            language=default_config["tts_lang"],
-        ),
-        turn_handling=TurnHandlingOptions(
-            turn_detection="vad",
-        ),
-    )
+    # Pull MQTT configurations from your .env
+    mqtt_host = os.environ.get("MQTT_HOST", "localhost")
+    mqtt_port = int(os.environ.get("MQTT_PORT", 1883))
+    mqtt_username = os.environ.get("MQTT_USERNAME", "")
+    mqtt_password = os.environ.get("MQTT_PASSWORD", "")
+    
+    # Enable SSL if your port suggests it (e.g., 8883) or configure explicitly via env
+    use_ssl = os.environ.get("MQTT_SSL", "true").lower() == "true"
+    tls_context = ssl.create_default_context() if use_ssl else None
 
-    await session.start(room=ctx.room, agent=Assistant())
-    await session.generate_reply(instructions=STARTER_GREETING)
+    logger.info(f"Connecting to MQTT Broker at {mqtt_host}:{mqtt_port}...")
+
+    # We use aiomqtt as an async context manager to ensure the connection stays alive and cleans up
+    async with aiomqtt.Client(
+        hostname=mqtt_host,
+        port=mqtt_port,
+        username=mqtt_username if mqtt_username else None,
+        password=mqtt_password if mqtt_password else None,
+        tls_context=tls_context,
+    ) as mqtt_client:
+        
+        session = AgentSession(
+            stt=azure.STT(language=["ar-EG", "en-US"]),
+            llm=inference.LLM(model="google/gemini-3.1-flash-lite"),
+            tts=inference.TTS(
+                model="cartesia/sonic-3.5",
+                voice=default_config["voice_id"],
+                language=default_config["tts_lang"],
+            ),
+            turn_handling=TurnHandlingOptions(turn_detection="vad"),
+        )
+
+        # Inject the active MQTT client into the Assistant
+        assistant = Assistant(mqtt_client=mqtt_client)
+
+        await session.start(room=ctx.room, agent=assistant)
+        await session.generate_reply(instructions=STARTER_GREETING)
+
+        # Keep the MQTT connection context alive until the LiveKit room disconnects
+        disconnect_event = asyncio.Event()
+        ctx.room.on("disconnected", disconnect_event.set)
+        await disconnect_event.wait()
 
 
 if __name__ == "__main__":
