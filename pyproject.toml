@@ -6,6 +6,7 @@ requires-python = ">=3.11"
 dependencies = [
     "fastapi[standard]",
     "fastapi-mqtt",
+    "aiomqtt",
     "pydantic",
     "python-dotenv",
     "httpx2",
