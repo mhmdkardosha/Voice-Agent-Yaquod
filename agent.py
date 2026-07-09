@@ -1,10 +1,10 @@
-import sys
 import asyncio
+import sys
 
 # Add this to fix the Windows aiomqtt NotImplementedError
-if sys.platform.startswith('win'):
+if sys.platform.startswith("win"):
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    
+
 import json
 import logging
 import os
@@ -106,7 +106,6 @@ class Assistant(Agent):
             language=config["tts_lang"],
         )
 
-
         pool = getattr(session.tts, "_pool", None)
         if pool is not None and hasattr(pool, "invalidate"):
             pool.invalidate()
@@ -200,7 +199,7 @@ class Assistant(Agent):
     async def _get_vehicle_location(self) -> tuple[float, float] | None:
         """
         Returns the vehicle location.
-        Note: Currently uses a static default. To make this dynamic, 
+        Note: Currently uses a static default. To make this dynamic,
         you can subscribe to your MQTT location topic in a background task.
         """
         return _DEFAULT_LOCATION
@@ -308,7 +307,7 @@ class Assistant(Agent):
             topic = f"vehicle/{vehicle_id}/navigation/change"
 
             logger.info("Publishing Navigation Change to %s:\n%s", topic, json.dumps(payload))
-            
+
             # Step 2: Publish to MQTT
             await self.mqtt_client.publish(topic, json.dumps(payload))
             return f"Navigation started to {place['name']}."
@@ -348,7 +347,7 @@ async def my_agent(ctx: agents.JobContext):
     mqtt_port = int(os.environ.get("MQTT_PORT", 1883))
     mqtt_username = os.environ.get("MQTT_USERNAME", "")
     mqtt_password = os.environ.get("MQTT_PASSWORD", "")
-    
+
     # Enable SSL if your port suggests it (e.g., 8883) or configure explicitly via env
     use_ssl = os.environ.get("MQTT_SSL", "true").lower() == "true"
     tls_context = ssl.create_default_context() if use_ssl else None
@@ -363,7 +362,6 @@ async def my_agent(ctx: agents.JobContext):
         password=mqtt_password if mqtt_password else None,
         tls_context=tls_context,
     ) as mqtt_client:
-        
         session = AgentSession(
             stt=azure.STT(language=["ar-EG", "en-US"]),
             llm=inference.LLM(model="google/gemini-3.1-flash-lite"),
