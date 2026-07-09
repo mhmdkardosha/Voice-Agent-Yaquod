@@ -15,7 +15,6 @@ class VehicleAction(BaseModel):
             raise ValueError(f"Action '{v}' is not allowed")
         return v
 
-
 class VehicleLocation(BaseModel):
     vehicle_id: str
     lat: float
