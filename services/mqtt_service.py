@@ -16,7 +16,7 @@ logger = logging.getLogger("yaquod-agent")
 class CentralMQTTService:
     def __init__(self):
         self.client = None
-        self.r_client = get_redis()
+        self.r_client = None
         self._runner_task = None
 
     def start(self):
@@ -25,6 +25,9 @@ class CentralMQTTService:
             logger.info("[Central MQTT] Background task started.")
 
     async def _connect_and_run(self):
+        if self.r_client is None:
+            self.r_client = get_redis()
+
         mqtt_host = os.environ.get("MQTT_HOST", "localhost")
         mqtt_port = int(os.environ.get("MQTT_PORT", 1883))
         mqtt_username = os.environ.get("MQTT_USERNAME", "")
