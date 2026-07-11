@@ -437,10 +437,12 @@ class Assistant(Agent):
         if not data:
             return f"No active trip data found for vehicle {vehicle_id}."
 
-        if not data.get("pickup_point_name") and not data.get("destination_name"):
-            return "The vehicle is currently not on an active scheduled trip."
-
-        summary = f"Trip: From '{data.get('pickup_point_name', 'N/A')}' to '{data.get('destination_name', 'N/A')}'. "
+        summary = ""
+        if data.get("pickup_point_name") or data.get("destination_name"):
+            summary += (
+                f"Trip: From '{data.get('pickup_point_name', 'N/A')}' "
+                f"to '{data.get('destination_name', 'N/A')}'. "
+            )
         if data.get("expected_trip_duration") is not None:
             summary += f"Total Duration: {data['expected_trip_duration']} mins. "
         if data.get("remaining_distance") is not None:
