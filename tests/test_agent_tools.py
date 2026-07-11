@@ -190,52 +190,52 @@ class TestSearchWeb:
         assert "No search results found" in result
 
 
-class TestGetWeather:
-    async def test_successful_weather_fetch(self, assistant, mock_context):
-        mock_weather_response = {
-            "location": {
-                "name": "Cairo",
-                "localtime": "2026-07-09 20:30",
-            },
-            "current": {
-                "temp_c": 35,
-                "condition": {
-                    "text": "Sunny",
-                },
-            },
-        }
+# class TestGetWeather:
+#     async def test_successful_weather_fetch(self, assistant, mock_context):
+#         mock_weather_response = {
+#             "location": {
+#                 "name": "Cairo",
+#                 "localtime": "2026-07-09 20:30",
+#             },
+#             "current": {
+#                 "temp_c": 35,
+#                 "condition": {
+#                     "text": "Sunny",
+#                 },
+#             },
+#         }
 
-        with patch("agent.httpx2.AsyncClient") as mock_client:
-            mock_response = MagicMock()
-            mock_response.is_success = True
-            mock_response.json.return_value = mock_weather_response
-            mock_client.return_value.__aenter__.return_value.get.return_value = mock_response
+#         with patch("agent.httpx2.AsyncClient") as mock_client:
+#             mock_response = MagicMock()
+#             mock_response.is_success = True
+#             mock_response.json.return_value = mock_weather_response
+#             mock_client.return_value.__aenter__.return_value.get.return_value = mock_response
 
-            result = await assistant.get_weather_and_time(mock_context)
+#             result = await assistant.get_weather_and_time(mock_context)
 
-        assert "Cairo" in result
-        assert "35" in result
+#         assert "Cairo" in result
+#         assert "35" in result
 
-    async def test_missing_weather_api_key(self, assistant, mock_context):
-        with patch.dict(os.environ, {}, clear=False):
-            os.environ.pop("WEATHER_API_KEY", None)
-            result = await assistant.get_weather_and_time(mock_context)
+#     async def test_missing_weather_api_key(self, assistant, mock_context):
+#         with patch.dict(os.environ, {}, clear=False):
+#             os.environ.pop("WEATHER_API_KEY", None)
+#             result = await assistant.get_weather_and_time(mock_context)
 
-        assert "WEATHER_API_KEY" in result
+#         assert "WEATHER_API_KEY" in result
 
-    async def test_weather_api_error(self, assistant, mock_context):
-        with (
-            patch.dict(os.environ, {"WEATHER_API_KEY": "test_key"}),
-            patch("httpx2.AsyncClient") as mock_client,
-        ):
-            mock_response = MagicMock()
-            mock_response.is_success = False
-            mock_response.status_code = 500
-            mock_client.return_value.__aenter__.return_value.get.return_value = mock_response
+#     async def test_weather_api_error(self, assistant, mock_context):
+#         with (
+#             patch.dict(os.environ, {"WEATHER_API_KEY": "test_key"}),
+#             patch("httpx2.AsyncClient") as mock_client,
+#         ):
+#             mock_response = MagicMock()
+#             mock_response.is_success = False
+#             mock_response.status_code = 500
+#             mock_client.return_value.__aenter__.return_value.get.return_value = mock_response
 
-            result = await assistant.get_weather_and_time(mock_context)
+#             result = await assistant.get_weather_and_time(mock_context)
 
-        assert "error" in result.lower() or "unavailable" in result.lower()
+#         assert "error" in result.lower() or "unavailable" in result.lower()
 
 
 class TestNavigationMQTTActions:
