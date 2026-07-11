@@ -226,10 +226,11 @@ class Assistant(Agent):
 
     async def _get_vehicle_location(self) -> tuple[float, float] | None:
         """Fetch real-time location from Redis, or return default if unavailable."""
-        r_client = get_redis()
         redis_key = f"vehicle:status:{self.vehicle_id}"
 
         try:
+            r_client = get_redis()
+
             data_str = await r_client.get(redis_key)
             if data_str:
                 data = json.loads(data_str)
