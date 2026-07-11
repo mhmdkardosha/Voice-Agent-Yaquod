@@ -1,40 +1,44 @@
-import jwt
-import datetime
-from fastapi import FastAPI, HTTPException, status
-from pydantic import BaseModel
+import json
+from contextlib import asynccontextmanager
 
-app = FastAPI()
+from fastapi import FastAPI, HTTPException
 
-STATIC_EXPECTED_VIN = "VIN_12345"
-STATIC_EXPECTED_JWT = "JWT_SECRET_TOKEN"
+from config.redis_db import get_redis
+from routes.models.login_request_model import LoginRequest
+from services.mqtt_service import central_mqtt
+from services.validation_service import validate_vehicle
 
-class LoginRequest(BaseModel):
-    vehicle_id: str
-    vin_number: str
-    jwt: str
 
-def validate_vin_static(vin: str) -> bool:
-    return vin == STATIC_EXPECTED_VIN
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    central_mqtt.start()
 
-def validate_jwt_static(token: str) -> bool:
-    return token == STATIC_EXPECTED_JWT
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 
 
 @app.post("/login")
 async def login(data: LoginRequest):
-    if not validate_vin_static(data.vin_number):
-        raise HTTPException(status_code=401, detail="Invalid VIN Number")
-    
-    if not validate_jwt_static(data.jwt):
-        raise HTTPException(status_code=401, detail="Invalid JWT Token")
-    
+    is_valid, error = validate_vehicle(data.vin_number, data.jwt)
+
+    if not is_valid:
+        raise HTTPException(status_code=401, detail=error)
+
     active_vehicle_id = data.vehicle_id
-    
+    redis_client = get_redis()
+
+    redis_client.set(
+        f"vehicle:auth:{data.vin_number}",
+        json.dumps({
+            "status": "authenticated",
+            "vehicle_id": data.vehicle_id,
+        }),
+    )
+
+    redis_client.set(f"vehicle:map:{data.vehicle_id}", data.vin_number, ex=3600)
+
     print(f"Authenticated {active_vehicle_id}")
-    
-    return {
-        "status": "success",
-        "message": "Authenticated",
-        "vehicle_id": active_vehicle_id
-    }
-    
+
+    return {"status": "success", "message": "Authenticated", "vehicle_id": active_vehicle_id}
