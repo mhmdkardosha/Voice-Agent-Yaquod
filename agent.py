@@ -9,17 +9,13 @@ import json
 import logging
 import os
 import re
-import ssl
-from collections.abc import AsyncGenerator, AsyncIterable
-import aiomqtt
-import json
-import httpx2
-from dotenv import load_dotenv
-from config.redis_db import get_redis
-from routes.vehicle_mqtt import listen_to_mqtt_state
-import ssl
 from collections.abc import AsyncGenerator, AsyncIterable
 
+import httpx2
+from dotenv import load_dotenv
+
+from config.redis_db import get_redis
+from services.mqtt_service import central_mqtt
 
 load_dotenv(override=True)
 
@@ -79,10 +75,10 @@ _WAIT_MESSAGES: dict[str, dict[str, str]] = {
 
 
 class Assistant(Agent):
-    def __init__(self, mqtt_client: aiomqtt.Client) -> None:
+    def __init__(self, vehicle_id: str) -> None:
         super().__init__(instructions=SYSTEM_PROMPT)
         self._current_lang = DEFAULT_LANG
-        self.mqtt_client = mqtt_client
+        self.vehicle_id = vehicle_id
 
     async def transcription_node(
         self, text: AsyncIterable[str], model_settings: object
@@ -139,19 +135,19 @@ class Assistant(Agent):
         if error:
             return error
 
-        vehicle_id = "vehicle_001"
+        vehicle_id = self.vehicle_id
         payload = {"vehicle_id": vehicle_id, "action": action, "parameters": parameters}
-        topic = f"vehicle/{vehicle_id}/action"
-
-        logger.info("Publishing Vehicle Action to %s:\n%s", topic, json.dumps(payload, indent=2))
+        logger.info("Publishing action '%s' for car: %s", action, vehicle_id)
 
         try:
-            await self.mqtt_client.publish(topic, json.dumps(payload))
-            return f"Executed {action}"
+            success = await central_mqtt.publish_action(vehicle_id, "action", payload)
+            if success:
+                return f"Executed {action}"
+            else:
+                return "Vehicle system unavailable"
         except Exception as e:
             logger.error(f"MQTT publish error: {e}")
             return "Vehicle system unavailable"
-
 
     @function_tool
     async def get_weather_and_time(
@@ -161,7 +157,7 @@ class Assistant(Agent):
     ) -> str:
         """
         Fetches vehicle environment metrics (weather, time, or both) based on current GPS coordinates.
-        
+
         Args:
             request_type: Determined by the user's intent. Supported values:
                           "time" (if user strictly asks for time/date),
@@ -194,14 +190,16 @@ class Assistant(Agent):
                 if weather_response.is_success:
                     weather_data = weather_response.json()
 
-                    # Extract dynamic local time data 
-                    localtime_str = weather_data["location"]["localtime"]  # e.g., "2026-07-08 21:00"
+                    # Extract dynamic local time data
+                    localtime_str = weather_data["location"][
+                        "localtime"
+                    ]  # e.g., "2026-07-08 21:00"
                     dt = datetime.datetime.strptime(localtime_str, "%Y-%m-%d %H:%M")
-                    
+
                     day_name = dt.strftime("%A")
                     formatted_date = dt.strftime("%B %d, %Y")
                     time_str = dt.strftime("%I:%M %p")
-                    
+
                     time_output = f"The local time in the vehicle is {time_str} on {day_name}, {formatted_date}."
 
                     # Branch response logic based on the LLM-selected request_type
@@ -212,8 +210,10 @@ class Assistant(Agent):
                     city = weather_data["location"]["name"]
                     temp = weather_data["current"]["temp_c"]
                     condition = weather_data["current"]["condition"]["text"]
-                    
-                    weather_output = f"The weather in {city} is {condition} with a temperature of {temp}°C."
+
+                    weather_output = (
+                        f"The weather in {city} is {condition} with a temperature of {temp}°C."
+                    )
 
                     return f"{weather_output} {time_output}"
                 else:
@@ -225,20 +225,26 @@ class Assistant(Agent):
             return "Environment synchronization system unavailable."
 
     async def _get_vehicle_location(self) -> tuple[float, float] | None:
-        """
-        Returns the vehicle location.
-        Note: Currently uses a static default. To make this dynamic,
-        you can subscribe to your MQTT location topic in a background task.
-        """
+        """Fetch real-time location from Redis, or return default if unavailable."""
+        r_client = get_redis()
+        redis_key = f"vehicle:status:{self.vehicle_id}"
+
+        try:
+            data_str = await r_client.get(redis_key)
+            if data_str:
+                data = json.loads(data_str)
+                lat = data.get("lat")
+                lon = data.get("long")
+
+                if lat is not None and lon is not None:
+                    logger.info(f"Using real-time location for {self.vehicle_id}")
+                    return (float(lat), float(lon))
+
+        except Exception as e:
+            logger.error(f"Error fetching location from Redis: {e}")
+
+        logger.info(f"Using default location for {self.vehicle_id}")
         return _DEFAULT_LOCATION
-
-
-    
-
-
-
-    
-
 
     @function_tool
     async def search_nearby_places(
@@ -333,20 +339,24 @@ class Assistant(Agent):
             if place is None:
                 return "I couldn't find the destination you specified. Please check the name or address and try again."
 
-            vehicle_id = "vehicle_001"
+            vehicle_id = self.vehicle_id
             payload = {
                 "vehicle_id": vehicle_id,
                 "destination": place["name"],
                 "latitude": place["lat"],
                 "longitude": place["lng"],
             }
-            topic = f"vehicle/{vehicle_id}/navigation/change"
 
-            logger.info("Publishing Navigation Change to %s:\n%s", topic, json.dumps(payload))
+            logger.info(
+                "Publishing Navigation Change to %s:\n%s", "navigation/change", json.dumps(payload)
+            )
 
-            # Step 2: Publish to MQTT
-            await self.mqtt_client.publish(topic, json.dumps(payload))
-            return f"Navigation started to {place['name']}."
+            success = await central_mqtt.publish_action(vehicle_id, "navigation/change", payload)
+
+            if success:
+                return f"Navigation started to {place['name']}."
+            else:
+                return "Navigation system unavailable."
 
         except Exception as e:
             logger.exception(e)
@@ -358,28 +368,33 @@ class Assistant(Agent):
         context: RunContext,
     ) -> str:
         """Cancel the current navigation via direct MQTT publish."""
-        vehicle_id = "vehicle_001"
+        vehicle_id = self.vehicle_id
         payload = {"vehicle_id": vehicle_id}
-        topic = f"vehicle/{vehicle_id}/navigation/cancel"
 
         try:
-            logger.info("Publishing Cancel Navigation to %s", topic)
-            await self.mqtt_client.publish(topic, json.dumps(payload))
-            return "Navigation cancelled."
+            logger.info("Publishing Cancel Navigation to %s", "navigation/cancel")
+            success = await central_mqtt.publish_action(vehicle_id, "navigation/cancel", payload)
+
+            if success:
+                return "Navigation cancelled."
+            else:
+                return "Navigation system unavailable."
         except Exception as e:
             logger.error(f"Navigation cancel error: {e}")
             return "Navigation system unavailable."
 
-    async def _get_raw_vehicle_dict(self, vehicle_id: str) -> dict:
+    async def _get_raw_vehicle_dict(self) -> dict:
         """Fetch and parse raw vehicle status from Redis."""
+        vehicle_id = self.vehicle_id
         r_client = getattr(self, "redis_client", None)
         if not r_client:
             from config.redis_db import get_redis
+
             r_client = get_redis()
 
         redis_key = f"vehicle:status:{vehicle_id}"
         raw_data_str = r_client.get(redis_key)
-        
+
         if not raw_data_str:
             return {}
         try:
@@ -388,45 +403,43 @@ class Assistant(Agent):
             logger.error(f"Error decoding Redis JSON: {e}")
             return {}
 
-
     @function_tool
     async def get_vehicle_core_telemetry(
         self,
         context: RunContext,
-        vehicle_id: str = "vehicle_001",
     ) -> str:
         """Get basic specifications, identity, speed, and battery/fuel levels."""
-        data = await self._get_raw_vehicle_dict(vehicle_id)
+        vehicle_id = self.vehicle_id
+        data = await self._get_raw_vehicle_dict()
         if not data:
             return f"No core telemetry found for vehicle {vehicle_id}."
-            
+
         model = data.get("vehicle_model") or "Unknown"
         color = data.get("vehicle_color") or "Unknown"
         plate = data.get("plate_num") or "N/A"
-        
+
         summary = f"Vehicle: {color} {model} (Plate: {plate}). "
         if data.get("battery_level") is not None:
             summary += f"Battery Level: {data['battery_level']}%. "
         if data.get("number_of_seats") is not None:
             summary += f"Available Seats: {data['number_of_seats']}. "
-            
-        return summary.strip()
 
+        return summary.strip()
 
     @function_tool
     async def get_vehicle_trip_profile(
         self,
         context: RunContext,
-        vehicle_id: str = "vehicle_001",
     ) -> str:
+        vehicle_id = self.vehicle_id
         """Get active trip details, route, destination, remaining distance, and ETA."""
-        data = await self._get_raw_vehicle_dict(vehicle_id)
+        data = await self._get_raw_vehicle_dict()
         if not data:
             return f"No active trip data found for vehicle {vehicle_id}."
-            
+
         if not data.get("pickup_point_name") and not data.get("destination_name"):
             return "The vehicle is currently not on an active scheduled trip."
-            
+
         summary = f"Trip: From '{data.get('pickup_point_name', 'N/A')}' to '{data.get('destination_name', 'N/A')}'. "
         if data.get("expected_trip_duration") is not None:
             summary += f"Total Duration: {data['expected_trip_duration']} mins. "
@@ -436,7 +449,7 @@ class Assistant(Agent):
             summary += f"Time to Arrival: {data['remaining_time']} minutes. "
         if data.get("speed") is not None:
             summary += f"Current Speed: {data['speed']} km/h. "
-            
+
         return summary.strip()
 
     @function_tool
@@ -444,52 +457,60 @@ class Assistant(Agent):
         self,
         context: RunContext,
         system_type: str = "all",
-        vehicle_id: str = "vehicle_001",
     ) -> str:
         """Get cabin status. Filter by 'ac', 'windows', 'multimedia', 'lights', 'seats', or 'all'."""
-        data = await self._get_raw_vehicle_dict(vehicle_id)
+        vehicle_id = self.vehicle_id
+        data = await self._get_raw_vehicle_dict()
         if not data:
             return f"No cabin system data found for vehicle {vehicle_id}."
-            
+
         system_type = system_type.lower().strip()
         status_parts = []
-        
+
         if system_type in ["ac", "all"]:
             ac_details = []
-            if data.get("ac_status") is not None: ac_details.append(f"Status: {data['ac_status']}")
-            if data.get("ac_temperature") is not None: ac_details.append(f"Temp: {data['ac_temperature']}°C")
-            if data.get("ac_fan_speed") is not None: ac_details.append(f"Fan Speed: {data['ac_fan_speed']}")
-            if data.get("ac_airflow_mode") is not None: ac_details.append(f"Airflow: {data['ac_airflow_mode']}")
-            if data.get("ac_auto") is not None: ac_details.append(f"Auto: {data['ac_auto']}")
-            if data.get("ac_sync") is not None: ac_details.append(f"Sync: {data['ac_sync']}")
+            if data.get("ac_status") is not None:
+                ac_details.append(f"Status: {data['ac_status']}")
+            if data.get("ac_temperature") is not None:
+                ac_details.append(f"Temp: {data['ac_temperature']}°C")
+            if data.get("ac_fan_speed") is not None:
+                ac_details.append(f"Fan Speed: {data['ac_fan_speed']}")
+            if data.get("ac_airflow_mode") is not None:
+                ac_details.append(f"Airflow: {data['ac_airflow_mode']}")
+            if data.get("ac_auto") is not None:
+                ac_details.append(f"Auto: {data['ac_auto']}")
+            if data.get("ac_sync") is not None:
+                ac_details.append(f"Sync: {data['ac_sync']}")
             if ac_details:
                 status_parts.append(f"AC: [{', '.join(ac_details)}]")
-                
+
         if system_type in ["windows", "all"]:
             win_details = []
-            if data.get("window_status") is not None: win_details.append(f"Status: {data['window_status']}")
-            if data.get("window_lock_status") is not None: win_details.append(f"Locked: {data['window_lock_status']}")
+            if data.get("window_status") is not None:
+                win_details.append(f"Status: {data['window_status']}")
+            if data.get("window_lock_status") is not None:
+                win_details.append(f"Locked: {data['window_lock_status']}")
             if win_details:
                 status_parts.append(f"Windows: [{', '.join(win_details)}]")
-                
+
         if system_type in ["multimedia", "music", "all"]:
             music_details = []
-            if data.get("music_status") is not None: music_details.append(f"Playing: {data['music_status']}")
-            if data.get("music_volume") is not None: music_details.append(f"Volume: {data['music_volume']}/100")
+            if data.get("music_status") is not None:
+                music_details.append(f"Playing: {data['music_status']}")
+            if data.get("music_volume") is not None:
+                music_details.append(f"Volume: {data['music_volume']}/100")
             if music_details:
                 status_parts.append(f"Music: [{', '.join(music_details)}]")
 
-        if system_type in ["lights", "all"]:
-            if data.get("reading_light_status") is not None:
-                status_parts.append(f"Reading Lights: {data['reading_light_status']}")
+        if system_type in ["lights", "all"] and data.get("reading_light_status") is not None:
+            status_parts.append(f"Reading Lights: {data['reading_light_status']}")
 
-        if system_type in ["seats", "all"]:
-            if data.get("seat_status") is not None:
-                status_parts.append(f"Seats: {data['seat_status']}")
+        if system_type in ["seats", "all"] and data.get("seat_status") is not None:
+            status_parts.append(f"Seats: {data['seat_status']}")
 
         if not status_parts:
             return f"No metrics found for cabin system type: '{system_type}'."
-            
+
         return f"Vehicle {vehicle_id} Cabin Status -> " + " | ".join(status_parts)
 
 
@@ -499,58 +520,62 @@ server = AgentServer()
 @server.rtc_session(agent_name="yaquod")
 async def my_agent(ctx: agents.JobContext):
     default_config = LANGUAGE_CONFIGS[DEFAULT_LANG]
-    mqtt_host = os.environ.get("MQTT_HOST", "localhost")
-    mqtt_port = int(os.environ.get("MQTT_PORT", 1883))
-    mqtt_username = os.environ.get("MQTT_USERNAME", "")
-    mqtt_password = os.environ.get("MQTT_PASSWORD", "")
-    
-    use_ssl = os.environ.get("MQTT_SSL", "false").lower() == "true"
-    tls_context = ssl.create_default_context() if use_ssl else None
-
-    logger.info(f"Connecting to MQTT Broker at {mqtt_host}:{mqtt_port}...")
-    
     r_client = get_redis()
     vehicle_id = "vehicle_001"
 
+    # if ctx.room.metadata:
+    #     try:
+    #         metadata = json.loads(ctx.room.metadata)
+    #         vehicle_id = metadata.get("car_id", "vehicle_001")
+    #     except json.JSONDecodeError:
+    #         logger.error("Failed to parse room metadata as JSON")
+    central_mqtt.start()
     try:
-        async with aiomqtt.Client(
-            hostname=mqtt_host, port=mqtt_port,
-            username=mqtt_username if mqtt_username else None,
-            password=mqtt_password if mqtt_password else None,
-            tls_context=tls_context,
-        ) as mqtt_client:
-            
-            # Start background MQTT listener
-            mqtt_listener_task = asyncio.create_task(listen_to_mqtt_state(mqtt_client))
+        session = AgentSession(
+            stt=azure.STT(language=["ar-EG", "en-US"]),
+            llm=inference.LLM(model="google/gemini-3.1-flash-lite"),
+            tts=inference.TTS(
+                model="cartesia/sonic-3.5",
+                voice=default_config["voice_id"],
+                language=default_config["tts_lang"],
+            ),
+            turn_handling=TurnHandlingOptions(turn_detection="vad"),
+        )
 
-            session = AgentSession(
-                stt=azure.STT(language=["ar-EG", "en-US"]),
-                llm=inference.LLM(model="google/gemini-3.1-flash-lite"),
-                tts=inference.TTS(model="cartesia/sonic-3.5", voice=default_config["voice_id"], language=default_config["tts_lang"]),
-                turn_handling=TurnHandlingOptions(turn_detection="vad"),
-            )
+        assistant = Assistant(vehicle_id=vehicle_id)
+        await session.start(room=ctx.room, agent=assistant)
+        await session.generate_reply(instructions=STARTER_GREETING)
 
-            assistant = Assistant(mqtt_client=mqtt_client)
-            await session.start(room=ctx.room, agent=assistant)
-            await session.generate_reply(instructions=STARTER_GREETING)
+        disconnect_event = asyncio.Event()
+        ctx.room.on("disconnected", disconnect_event.set)
+        await disconnect_event.wait()
 
-            # Wait for room disconnect
-            disconnect_event = asyncio.Event()
-            ctx.room.on("disconnected", disconnect_event.set)
-            await disconnect_event.wait()
-            
-            # Cleanup MQTT task
-            mqtt_listener_task.cancel()
-            await asyncio.gather(mqtt_listener_task, return_exceptions=True)
-            
     finally:
-        # Delete vehicle data from Redis when session ends
+        logger.info(f"[LiveKit Session] Ending for car: {vehicle_id}. Cleaning up...")
         try:
-            r_client.delete(f"vehicle:status:{vehicle_id}")
-            logger.info(f"Redis data deleted successfully for vehicle: {vehicle_id}")
-        except Exception as e:
-            logger.error(f"Error deleting Redis data: {e}")
+            await r_client.delete(f"vehicle:status:{vehicle_id}")
+            lua_cleanup_script = """
+            local vin = redis.call('get', KEYS[1])
+            if vin then
+                redis.call('del', 'vehicle:auth:' .. vin)
+                redis.call('del', KEYS[1])
+                return 1
+            end
+            return 0
+            """
 
+            map_key = f"vehicle:map:{vehicle_id}"
+            result = await r_client.eval(lua_cleanup_script, 1, map_key)
+
+            if result == 1:
+                logger.info(
+                    f"[LiveKit CleanUp] Redis safely cleared auth and mapping internally for {vehicle_id}."
+                )
+            else:
+                logger.warning(f"[LiveKit CleanUp] No mapping found internally for {vehicle_id}.")
+
+        except Exception as e:
+            logger.error(f"Error during completely secure Redis cleanup: {e}")
 
 
 if __name__ == "__main__":
