@@ -1,6 +1,5 @@
-import json
 import os
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -25,9 +24,9 @@ def api_client():
 
 @pytest.fixture
 def mock_mqtt():
-    """Provides a mocked async aiomqtt Client instance."""
+    """Provides a mocked MQTT service."""
     client = MagicMock()
-    client.publish = AsyncMock()
+    client.publish_action = AsyncMock(return_value=True)
     return client
 
 
@@ -37,23 +36,24 @@ def mock_context():
 
 
 async def test_api_receives_correct_action(api_client, mock_mqtt, mock_context):
-    # Inject the mocked MQTT client into the Assistant
-    assistant = Assistant(mqtt_client=mock_mqtt)
+    with (
+        patch("agent.central_mqtt", mock_mqtt),
+        patch("services.mqtt_service.central_mqtt", mock_mqtt),
+    ):
+        assistant = Assistant(vehicle_id="vehicle_001")
 
-    # Execute the action via the Assistant instance
-    result = await assistant.vehicle_action(mock_context, action="music_play", parameters={})
+        result = await assistant.vehicle_action(mock_context, action="music_play", parameters={})
 
-    # Assert that the assistant processes and indicates execution success
     assert result == "Executed music_play"
 
-    # Verify that the correct payload was published to the proper MQTT topic
     expected_payload = {
         "vehicle_id": "vehicle_001",
         "action": "music_play",
         "parameters": {},
     }
 
-    # Extract args to safely match serialized JSON structures
-    topic, payload_str = mock_mqtt.publish.call_args[0]
-    assert topic == "vehicle/vehicle_001/action"
-    assert json.loads(payload_str) == expected_payload
+    car_id, action_type, payload = mock_mqtt.publish_action.call_args[0]
+
+    assert car_id == "vehicle_001"
+    assert action_type == "action"
+    assert payload == expected_payload

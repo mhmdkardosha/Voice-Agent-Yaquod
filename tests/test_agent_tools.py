@@ -1,4 +1,3 @@
-import json
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -13,16 +12,20 @@ pytestmark = pytest.mark.asyncio
 
 @pytest.fixture
 def mock_mqtt():
-    """Provides a mocked async aiomqtt Client instance."""
+    """Provides a mocked MQTT service."""
     client = MagicMock()
-    client.publish = AsyncMock()
+    client.publish_action = AsyncMock(return_value=True)
     return client
 
 
 @pytest.fixture
 def assistant(mock_mqtt):
-    """Instantiates Assistant with the mocked MQTT client."""
-    return Assistant(mqtt_client=mock_mqtt)
+    with (
+        patch("agent.central_mqtt", mock_mqtt),
+        patch("services.mqtt_service.central_mqtt", mock_mqtt),
+    ):
+        assistant = Assistant(vehicle_id="vehicle_001")
+        yield assistant
 
 
 @pytest.fixture
@@ -66,7 +69,7 @@ class TestVehicleAction:
         result = await assistant.vehicle_action(mock_context, action="ac_on", parameters={})
 
         assert result == "Executed ac_on"
-        mock_mqtt.publish.assert_called_once()
+        mock_mqtt.publish_action.assert_called_once()
 
     async def test_sends_correct_payload(self, assistant, mock_mqtt, mock_context):
         await assistant.vehicle_action(
@@ -80,18 +83,20 @@ class TestVehicleAction:
         }
 
         # Pull args out to match serializable content smoothly
-        topic, payload_str = mock_mqtt.publish.call_args[0]
-        assert topic == "vehicle/vehicle_001/action"
-        assert json.loads(payload_str) == expected_payload
+        car_id, topic_suffix, payload = mock_mqtt.publish_action.call_args[0]
+
+        assert car_id == "vehicle_001"
+        assert topic_suffix == "action"
+        assert payload == expected_payload
 
     async def test_disallowed_action_is_rejected(self, assistant, mock_mqtt, mock_context):
         result = await assistant.vehicle_action(mock_context, action="accelerate", parameters={})
 
         assert result == "This action is not allowed."
-        mock_mqtt.publish.assert_not_called()
+        mock_mqtt.publish_action.assert_not_called()
 
     async def test_mqtt_publish_error(self, assistant, mock_mqtt, mock_context):
-        mock_mqtt.publish.side_effect = Exception("Broker unreachable")
+        mock_mqtt.publish_action.side_effect = Exception("Broker unreachable")
 
         result = await assistant.vehicle_action(mock_context, action="ac_on", parameters={})
 
@@ -100,8 +105,8 @@ class TestVehicleAction:
     async def test_none_parameters_defaults_to_empty(self, assistant, mock_mqtt, mock_context):
         await assistant.vehicle_action(mock_context, action="ac_on", parameters=None)
 
-        _, payload_str = mock_mqtt.publish.call_args[0]
-        assert json.loads(payload_str)["parameters"] == {}
+        _, _, payload = mock_mqtt.publish_action.call_args[0]
+        assert payload["parameters"] == {}
 
     async def test_all_allowed_actions_are_accepted(self, assistant, mock_context):
         for action in ALLOWED_ACTIONS:
@@ -188,18 +193,18 @@ class TestSearchWeb:
 class TestGetWeather:
     async def test_successful_weather_fetch(self, assistant, mock_context):
         mock_weather_response = {
-    "location": {
-        "name": "Cairo",
-        "localtime": "2026-07-09 20:30",
-    },
-    "current": {
-        "temp_c": 35,
-        "condition": {
-            "text": "Sunny",
-        },
-    },
-}
-        
+            "location": {
+                "name": "Cairo",
+                "localtime": "2026-07-09 20:30",
+            },
+            "current": {
+                "temp_c": 35,
+                "condition": {
+                    "text": "Sunny",
+                },
+            },
+        }
+
         with patch("agent.httpx2.AsyncClient") as mock_client:
             mock_response = MagicMock()
             mock_response.is_success = True
@@ -243,21 +248,25 @@ class TestNavigationMQTTActions:
         assert "Navigation started" in result
         mock_context.session.say.assert_called_once()
 
-        topic, payload_str = mock_mqtt.publish.call_args[0]
-        assert topic == "vehicle/vehicle_001/navigation/change"
-        assert json.loads(payload_str)["destination"] == "Mall of Arabia"
+        car_id, topic_suffix, payload = mock_mqtt.publish_action.call_args[0]
+
+        assert car_id == "vehicle_001"
+        assert topic_suffix == "navigation/change"
+        assert payload["destination"] == "Mall of Arabia"
 
     async def test_change_destination_not_found(self, assistant, mock_mqtt, mock_context):
         with patch("agent.get_place_coordinates", return_value=None):
             result = await assistant.change_destination(mock_context, destination="Atlantis")
 
         assert "I couldn't find the destination" in result
-        mock_mqtt.publish.assert_not_called()
+        mock_mqtt.publish_action.assert_not_called()
 
     async def test_cancel_destination_success(self, assistant, mock_mqtt, mock_context):
         result = await assistant.cancel_destination(mock_context)
 
         assert result == "Navigation cancelled."
-        mock_mqtt.publish.assert_called_once_with(
-            "vehicle/vehicle_001/navigation/cancel", json.dumps({"vehicle_id": "vehicle_001"})
+        mock_mqtt.publish_action.assert_called_once_with(
+            "vehicle_001",
+            "navigation/cancel",
+            {"vehicle_id": "vehicle_001"},
         )
