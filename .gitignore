@@ -34,3 +34,5 @@ venv/
 # OS files
 .DS_Store
 Thumbs.db
+
+mock_vehicle.py
