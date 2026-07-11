@@ -21,7 +21,7 @@ app = FastAPI(lifespan=lifespan)
 
 @app.post("/login")
 async def login(data: LoginRequest):
-    is_valid, error = validate_vehicle(data.vin_number, data.jwt)
+    is_valid, error = validate_vehicle(data.vin_number)
 
     if not is_valid:
         raise HTTPException(status_code=401, detail=error)

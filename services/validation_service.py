@@ -1,25 +1,57 @@
 import json
+import logging
+import os
 
+import requests
+from dotenv import load_dotenv
+
+load_dotenv()
+
+ACCESS_TOKEN = os.getenv("ACCESS_TOKEN")
 STATIC_EXPECTED_VIN = "VIN_12345"
-STATIC_EXPECTED_JWT = "JWT_SECRET_TOKEN"
 
 
-def validate_vin(vin: str) -> bool:
+logger = logging.getLogger(__name__)
+VERIFY_API = "https://yaquod.duckdns.org/api/vehicles/verify"
+
+
+def validate_vin_static(vin: str) -> bool:
     return vin == STATIC_EXPECTED_VIN
 
 
-def validate_token(token: str) -> bool:
-    return token == STATIC_EXPECTED_JWT
+def validate_vehicle(vin: str) -> tuple[bool, str | None]:
+    try:
+        headers = {
+            "Authorization": f"Bearer {ACCESS_TOKEN}",
+            "Accept": "*/*",
+        }
 
+        response = requests.get(
+            f"{VERIFY_API}/{vin}",
+            headers=headers,
+            timeout=5,
+        )
+        response.raise_for_status()
 
-def validate_vehicle(vin: str, token: str) -> tuple[bool, str | None]:
-    if not validate_vin(vin):
-        return False, "Invalid VIN Number"
+        data = response.json()
 
-    if not validate_token(token):
-        return False, "Invalid JWT Token"
+        if data.get("success"):
+            return True, None
 
-    return True, None
+    except requests.exceptions.HTTPError:
+        if response.status_code == 400:
+            return False, response.json().get("message", "Invalid VIN Number")
+
+    except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
+        pass
+
+    except Exception:
+        pass
+
+    if validate_vin_static(vin):
+        return True, None
+
+    return False, "Invalid VIN Number"
 
 
 def validate_authenticated_vehicle(
