@@ -5,6 +5,8 @@ description = "Yaquod (يقود) — voice AI agent"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi[standard]",
+    "fastapi-mqtt",
+    "aiomqtt",
     "pydantic",
     "python-dotenv",
     "httpx2",
@@ -14,6 +16,7 @@ dependencies = [
     "livekit-plugins-silero",
     "livekit-plugins-turn-detector",
     "llama-index",
+    "redis"
 ]
 
 [project.optional-dependencies]

@@ -11,6 +11,7 @@ A bilingual (Arabic/English) real-time voice AI assistant powered by **LiveKit A
 - **Cartesia Sonic-3** for text-to-speech (via LiveKit Inference)
 - **Google Gemini 3.1 Flash Lite** for conversational LLM (via LiveKit Inference)
 - **Multilingual turn detection** for natural conversation flow
+- **MQTT vehicle communication** — real-time vehicle control and telemetry via MQTT broker
 - **Nearby Places Search** — find restaurants, gas stations, hospitals, and more using Google Maps Places API
 - **Web Search** — search the web for any information via Brave Search API
 - **Weather lookup** through WeatherAPI.com
@@ -51,6 +52,10 @@ A bilingual (Arabic/English) real-time voice AI assistant powered by **LiveKit A
    | `AZURE_SPEECH_REGION` | Azure Speech Services region (e.g. `eastus`) |
    | `GOOGLE_MAPS_API_KEY` | Google Maps Places API key (required for nearby places search) |
    | `WEATHER_API_KEY` | Your WeatherAPI.com API key (required for weather tool) |
+   | `MQTT_HOST` | MQTT broker hostname or IP address (e.g. `localhost`) |
+   | `MQTT_PORT` | MQTT broker port (e.g. `1883`) |
+   | `MQTT_USERNAME` | MQTT broker username (optional) |
+   | `MQTT_PASSWORD` | MQTT broker password (optional) |
    | `BRAVE_SEARCH_API_KEY` | Brave Search API key (required for web search) — get one free at https://api.search.brave.com |
 
 3. **Run the agent:**
@@ -59,6 +64,20 @@ A bilingual (Arabic/English) real-time voice AI assistant powered by **LiveKit A
    python agent.py start
    ```
 
+### MQTT Topics
+
+The agent communicates with the vehicle via MQTT. Here are the available topics:
+
+#### **Publishing Topics** (Agent → Vehicle)
+
+| Topic | Payload Schema | Example |
+|---|---|---|
+| `vehicle/{vehicle_id}/action` | `{"vehicle_id": "str", "action": "str", "parameters": {}}` | `{"vehicle_id": "vehicle_001", "action": "ac_on", "parameters": {}}` |
+| `vehicle/{vehicle_id}/navigation/change` | `{"vehicle_id": "str", "destination": "str", "latitude": float, "longitude": float}` | `{"vehicle_id": "vehicle_001", "destination": "Cairo Tower", "latitude": 30.0444, "longitude": 31.2357}` |
+| `vehicle/{vehicle_id}/navigation/cancel` | `{"vehicle_id": "str"}` | `{"vehicle_id": "vehicle_001"}` |
+
+**Allowed Actions:**
+`ac_on`, `ac_off`, `set_temperature`, `set_fan_speed`, `set_airflow_mode`, `climate_auto`, `climate_sync`, `window_open`, `window_close`, `window_lock`, `window_unlock`, `music_play`, `music_pause`, `set_volume`, `next_track`, `previous_track`, `reading_light_on`, `reading_light_off`, `change_destination`, `cancel_destination`, `safe_stop`, `seat_position`, `seat_recline`, `seat_height`
 ### Getting a Brave Search API Key
 
 The agent uses **Brave Search API** to fetch real-time web information.
