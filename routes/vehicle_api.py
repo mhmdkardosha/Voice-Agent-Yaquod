@@ -1,5 +1,6 @@
 import json
 import os
+import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
@@ -69,8 +70,6 @@ async def get_token(request: TokenRequest):
         raise HTTPException(
             status_code=500, detail="LiveKit credentials are not configured on the server."
         )
-
-    import uuid
 
     room_name = f"car-{request.car_id}-{uuid.uuid4()}"
     participant_identity = f"car-{request.car_id}"

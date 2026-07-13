@@ -126,100 +126,153 @@ def _apply_action(action: str, params: dict) -> list[str]:
     changes: list[str] = []
     p = params or {}
 
+    def _ac_on():
+        STATE["ac_status"] = "on"
+        return "AC turned ON"
+
+    def _ac_off():
+        STATE["ac_status"] = "off"
+        return "AC turned OFF"
+
+    def _set_temp():
+        temp = float(p.get("temperature", 22))
+        STATE["ac_temperature"] = temp
+        return f"AC temperature set to {temp}°C"
+
+    def _set_fan():
+        speed = int(p.get("speed", 1))
+        STATE["ac_fan_speed"] = speed
+        return f"Fan speed set to {speed}"
+
+    def _set_airflow():
+        mode = str(p.get("mode", "face"))
+        STATE["ac_airflow_mode"] = mode
+        return f"Airflow mode set to {mode}"
+
+    def _climate_auto():
+        STATE["ac_auto"] = bool(p.get("enabled", True))
+        return f"Climate auto {'ON' if STATE['ac_auto'] else 'OFF'}"
+
+    def _climate_sync():
+        STATE["ac_sync"] = bool(p.get("enabled", True))
+        return f"Climate sync {'ON' if STATE['ac_sync'] else 'OFF'}"
+
+    def _window_open():
+        target = str(p.get("window", "all"))
+        STATE["window_status"] = (
+            dict.fromkeys(STATE["window_status"], "open")
+            if target == "all"
+            else {**STATE["window_status"], target: "open"}
+        )
+        return f"Window opened: {target}"
+
+    def _window_close():
+        target = str(p.get("window", "all"))
+        STATE["window_status"] = (
+            dict.fromkeys(STATE["window_status"], "closed")
+            if target == "all"
+            else {**STATE["window_status"], target: "closed"}
+        )
+        return f"Window closed: {target}"
+
+    def _window_lock():
+        STATE["window_lock_status"] = True
+        return "Windows LOCKED"
+
+    def _window_unlock():
+        STATE["window_lock_status"] = False
+        return "Windows UNLOCKED"
+
+    def _music_play():
+        STATE["music_status"] = True
+        return "Music playing"
+
+    def _music_pause():
+        STATE["music_status"] = False
+        return "Music paused"
+
+    def _set_volume():
+        change = int(p.get("change", 0))
+        STATE["music_volume"] = max(0, min(100, STATE["music_volume"] + change))
+        return f"Volume adjusted by {change} to {STATE['music_volume']}/100"
+
+    def _next_track():
+        return "Track skipped forward (simulated)"
+
+    def _prev_track():
+        return "Track skipped backward (simulated)"
+
+    def _read_on():
+        target = str(p.get("light", "both"))
+        if target == "both":
+            STATE["reading_light_status"] = {"front": "on", "rear": "on"}
+        else:
+            STATE["reading_light_status"][target] = "on"
+        return f"Reading light ON: {target}"
+
+    def _read_off():
+        target = str(p.get("light", "both"))
+        if target == "both":
+            STATE["reading_light_status"] = {"front": "off", "rear": "off"}
+        else:
+            STATE["reading_light_status"][target] = "off"
+        return f"Reading light OFF: {target}"
+
+    def _seat_pos():
+        seat = str(p.get("seat", "driver"))
+        pct = int(p.get("percentage", 50))
+        STATE["seat_status"][seat] = f"position_{pct}"
+        return f"{seat} seat position set to {pct}%"
+
+    def _seat_rec():
+        seat = str(p.get("seat", "driver"))
+        pct = int(p.get("percentage", 0))
+        STATE["seat_status"][seat] = f"recline_{pct}"
+        return f"{seat} seat recline set to {pct}%"
+
+    def _seat_ht():
+        seat = str(p.get("seat", "driver"))
+        pct = int(p.get("percentage", 50))
+        STATE["seat_status"][seat] = f"height_{pct}"
+        return f"{seat} seat height set to {pct}%"
+
+    def _safe_stop():
+        return "SAFE STOP initiated — decelerating gradually"
+
+    def _nav():
+        return f"Navigation action '{action}' forwarded to vehicle"
+
+    handlers = {
+        "ac_on": _ac_on,
+        "ac_off": _ac_off,
+        "set_temperature": _set_temp,
+        "set_fan_speed": _set_fan,
+        "set_airflow_mode": _set_airflow,
+        "climate_auto": _climate_auto,
+        "climate_sync": _climate_sync,
+        "window_open": _window_open,
+        "window_close": _window_close,
+        "window_lock": _window_lock,
+        "window_unlock": _window_unlock,
+        "music_play": _music_play,
+        "music_pause": _music_pause,
+        "set_volume": _set_volume,
+        "next_track": _next_track,
+        "previous_track": _prev_track,
+        "reading_light_on": _read_on,
+        "reading_light_off": _read_off,
+        "seat_position": _seat_pos,
+        "seat_recline": _seat_rec,
+        "seat_height": _seat_ht,
+        "safe_stop": _safe_stop,
+        "change_destination": _nav,
+        "cancel_destination": _nav,
+    }
+
     try:
-        if action == "ac_on":
-            STATE["ac_status"] = "on"
-            changes.append("AC turned ON")
-        elif action == "ac_off":
-            STATE["ac_status"] = "off"
-            changes.append("AC turned OFF")
-        elif action == "set_temperature":
-            temp = float(p.get("temperature", 22))
-            STATE["ac_temperature"] = temp
-            changes.append(f"AC temperature set to {temp}°C")
-        elif action == "set_fan_speed":
-            speed = int(p.get("speed", 1))
-            STATE["ac_fan_speed"] = speed
-            changes.append(f"Fan speed set to {speed}")
-        elif action == "set_airflow_mode":
-            mode = str(p.get("mode", "face"))
-            STATE["ac_airflow_mode"] = mode
-            changes.append(f"Airflow mode set to {mode}")
-        elif action == "climate_auto":
-            STATE["ac_auto"] = bool(p.get("enabled", True))
-            changes.append(f"Climate auto {'ON' if STATE['ac_auto'] else 'OFF'}")
-        elif action == "climate_sync":
-            STATE["ac_sync"] = bool(p.get("enabled", True))
-            changes.append(f"Climate sync {'ON' if STATE['ac_sync'] else 'OFF'}")
-        elif action == "window_open":
-            target = str(p.get("window", "all"))
-            STATE["window_status"] = (
-                dict.fromkeys(STATE["window_status"], "open")
-                if target == "all"
-                else {**STATE["window_status"], target: "open"}
-            )
-            changes.append(f"Window opened: {target}")
-        elif action == "window_close":
-            target = str(p.get("window", "all"))
-            STATE["window_status"] = (
-                dict.fromkeys(STATE["window_status"], "closed")
-                if target == "all"
-                else {**STATE["window_status"], target: "closed"}
-            )
-            changes.append(f"Window closed: {target}")
-        elif action == "window_lock":
-            STATE["window_lock_status"] = True
-            changes.append("Windows LOCKED")
-        elif action == "window_unlock":
-            STATE["window_lock_status"] = False
-            changes.append("Windows UNLOCKED")
-        elif action == "music_play":
-            STATE["music_status"] = True
-            changes.append("Music playing")
-        elif action == "music_pause":
-            STATE["music_status"] = False
-            changes.append("Music paused")
-        elif action == "set_volume":
-            change = int(p.get("change", 0))
-            STATE["music_volume"] = max(0, min(100, STATE["music_volume"] + change))
-            changes.append(f"Volume adjusted by {change} to {STATE['music_volume']}/100")
-        elif action == "next_track":
-            changes.append("Track skipped forward (simulated)")
-        elif action == "previous_track":
-            changes.append("Track skipped backward (simulated)")
-        elif action == "reading_light_on":
-            target = str(p.get("light", "both"))
-            if target == "both":
-                STATE["reading_light_status"] = {"front": "on", "rear": "on"}
-            else:
-                STATE["reading_light_status"][target] = "on"
-            changes.append(f"Reading light ON: {target}")
-        elif action == "reading_light_off":
-            target = str(p.get("light", "both"))
-            if target == "both":
-                STATE["reading_light_status"] = {"front": "off", "rear": "off"}
-            else:
-                STATE["reading_light_status"][target] = "off"
-            changes.append(f"Reading light OFF: {target}")
-        elif action == "seat_position":
-            seat = str(p.get("seat", "driver"))
-            pct = int(p.get("percentage", 50))
-            STATE["seat_status"][seat] = f"position_{pct}"
-            changes.append(f"{seat} seat position set to {pct}%")
-        elif action == "seat_recline":
-            seat = str(p.get("seat", "driver"))
-            pct = int(p.get("percentage", 0))
-            STATE["seat_status"][seat] = f"recline_{pct}"
-            changes.append(f"{seat} seat recline set to {pct}%")
-        elif action == "seat_height":
-            seat = str(p.get("seat", "driver"))
-            pct = int(p.get("percentage", 50))
-            STATE["seat_status"][seat] = f"height_{pct}"
-            changes.append(f"{seat} seat height set to {pct}%")
-        elif action == "safe_stop":
-            changes.append("SAFE STOP initiated — decelerating gradually")
-        elif action in ("change_destination", "cancel_destination"):
-            changes.append(f"Navigation action '{action}' forwarded to vehicle")
+        handler = handlers.get(action)
+        if handler:
+            changes.append(handler())
         else:
             changes.append(f"Unknown action '{action}' (no simulation handler)")
     except (ValueError, KeyError, TypeError) as e:
