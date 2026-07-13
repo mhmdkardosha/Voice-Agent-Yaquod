@@ -1,27 +1,29 @@
 # Yaquod Agent
 
-A bilingual (Arabic/English) real-time voice AI assistant powered by **LiveKit Agents** with **Azure Speech STT**, **Cartesia TTS**, and **Gemini LLM**.
+A bilingual (Arabic/English) real-time voice AI assistant powered by **LiveKit Agents** with **Google Cloud STT**, **Google Cloud TTS**, and **Google Gemini LLM**.
 
 ## Features
 
 - **Real-time voice conversation** with low-latency streaming
 - **Arabic (Egyptian) & English support** with automatic language detection
 - **Dynamic language switching** — the agent detects when you switch languages and responds in kind
-- **Azure Speech Services** for speech-to-text (`ar-EG` / `en-US`)
-- **Cartesia Sonic-3** for text-to-speech (via LiveKit Inference)
-- **Google Gemini 3.1 Flash Lite** for conversational LLM (via LiveKit Inference)
+- **Google Cloud Speech-to-Text (Chirp 3)** for multi-language transcription
+- **Google Cloud Text-to-Speech (Chirp 3 HD)** for natural voice synthesis
+- **Google Gemini 3.5 Flash** for conversational LLM (via Vertex AI)
 - **Multilingual turn detection** for natural conversation flow
 - **MQTT vehicle communication** — real-time vehicle control and telemetry via MQTT broker
 - **Nearby Places Search** — find restaurants, gas stations, hospitals, and more using Google Maps Places API
 - **Web Search** — search the web for any information via Brave Search API
 - **Weather lookup** through WeatherAPI.com
 - **Allowed-action whitelist** for vehicle controls to enforce safety
+- **Docker containerization** support for easy deployment
+- **Built-in simulators** including an HTML test client and an MQTT vehicle simulator
 
 ## Prerequisites
 
 - Python 3.11+
-- A [LiveKit Cloud](https://livekit.io) account with Inference enabled (included on all plans)
-- An [Azure Speech Services](https://azure.microsoft.com/en-us/products/ai-services/ai-speech) resource (free tier works)
+- A [LiveKit Cloud](https://livekit.io) account
+- A **Google Cloud Platform** project with Vertex AI and Speech APIs enabled, and `GOOGLE_APPLICATION_CREDENTIALS` configured
 - A free **WeatherAPI** account for weather information
 
 ## Setup
@@ -48,8 +50,7 @@ A bilingual (Arabic/English) real-time voice AI assistant powered by **LiveKit A
    | `LIVEKIT_URL` | LiveKit Cloud WebSocket URL |
    | `LIVEKIT_API_KEY` | LiveKit Cloud API key |
    | `LIVEKIT_API_SECRET` | LiveKit Cloud API secret |
-   | `AZURE_SPEECH_KEY` | Azure Speech Services key |
-   | `AZURE_SPEECH_REGION` | Azure Speech Services region (e.g. `eastus`) |
+   | `GOOGLE_APPLICATION_CREDENTIALS` | Path to Google Cloud Service Account JSON key |
    | `GOOGLE_MAPS_API_KEY` | Google Maps Places API key (required for nearby places search) |
    | `WEATHER_API_KEY` | Your WeatherAPI.com API key (required for weather tool) |
    | `MQTT_HOST` | MQTT broker hostname or IP address (e.g. `localhost`) |
@@ -63,6 +64,15 @@ A bilingual (Arabic/English) real-time voice AI assistant powered by **LiveKit A
    ```bash
    python agent.py start
    ```
+
+### Docker Setup
+
+You can also run the agent using Docker:
+
+```bash
+docker build -t yaquod-agent .
+docker run --env-file .env -p 8081:8081 yaquod-agent
+```
 
 ### MQTT Topics
 
@@ -126,7 +136,7 @@ To run the LLM locally with Ollama instead of LiveKit Inference:
    ollama serve
    ```
 
-> Note: STT uses Azure Speech (not LiveKit Inference) and TTS uses LiveKit Inference (Cartesia). Only the LLM changes.
+> Note: STT and TTS use Google Cloud. Only the LLM changes.
 
 ## Linting & Formatting
 
@@ -172,6 +182,35 @@ pytest -v
 
 The agent's `vehicle_action` and `switch_language` methods are tested by calling them directly with mock objects, simulating the LiveKit framework. This means if anyone edits the agent code and breaks the whitelist, payload format, or error handling, the tests fail immediately without needing a LiveKit cloud connection.
 
+### Simulators & Test Client
+
+To test the full integration locally without the actual vehicle or a mobile app, you can use the built-in scripts:
+
+1. **Fake Vehicle Simulator:** Subscribes to MQTT topics and simulates vehicle behavior.
+   ```bash
+   python scripts/fake_vehicle_simulator.py
+   ```
+2. **Test Client UI:** Open the test client to connect to the agent and test voice and text interactions.
+   - **Remote URL:** [https://storage.googleapis.com/yaquod-test-client-project-83ac3b6e-bac2-4a8b-b48/test_client.html](https://storage.googleapis.com/yaquod-test-client-project-83ac3b6e-bac2-4a8b-b48/test_client.html)
+   - Alternatively, you can open `scripts/test_client.html` locally in your browser.
+
+   **How to Authenticate & Get a Token:**
+   Before connecting on the test client webpage, you must authenticate the vehicle and generate a LiveKit token using the backend endpoints.
+
+   1. **Login the Vehicle:** Send a `POST` request to authenticate the vehicle.
+      ```bash
+      curl -X POST https://yaquod-agent.fastapicloud.dev/login \
+           -H "Content-Type: application/json" \
+           -d '{"vin_number": "VALID_VIN_NUMBER", "vehicle_id": "vehicle_001"}'
+      ```
+   2. **Generate Token:** Send a `POST` request to retrieve the connection credentials.
+      ```bash
+      curl -X POST https://yaquod-agent.fastapicloud.dev/getToken \
+           -H "Content-Type: application/json" \
+           -d '{"car_id": "vehicle_001", "locale": "en-US"}'
+      ```
+   3. **Connect:** Copy the `participant_token` and `server_url` from the JSON response and paste them into the corresponding fields on the Test Client webpage, then click Connect.
+
 ### CI
 
 Every pull request to `main` runs Ruff linting + all tests via GitHub Actions.
@@ -188,19 +227,21 @@ The agent greets in Arabic by default. Speak in Arabic or English — it auto-de
 - `config/` — Shared constants (`ALLOWED_ACTIONS`, validation sets)
 - `llm/` — `SYSTEM_PROMPT` and `STARTER_GREETING` prompt strings
 - `utils/` — Helper functions for Google Places integration and vehicle action validation
-- `routes/` — FastAPI app (`vehicle_api.py`) and request models (`vehicle_action_model.py`, `navigation_models.py`)
-- `environment.yml` — Conda environment specification
+- `routes/` — FastAPI app (`vehicle_api.py`) and request models (`vehicle_action_model.py`, `navigation_models.py`, `token_request_model.py`)
+- `scripts/` — Test client UI (`test_client.html`) and vehicle simulator (`fake_vehicle_simulator.py`)
+- `Dockerfile` & `.dockerignore` — Containerization setup
+- `environment.yml` & `requirements.txt` — Environment and dependency specifications
 - `pyproject.toml` — Linting, formatting, and packaging configuration (ruff + setuptools)
 - `tests/` — Unit and integration tests
 
 The agent uses LiveKit Agents **v1 session API** (`Agent`, `AgentServer`, `AgentSession`):
 
-- **STT**: `azure.STT` (Azure Speech Services) with candidate languages `["ar-EG", "en-US"]`
-- **LLM**: `inference.LLM` (Gemini 3.1 Flash Lite) via LiveKit Inference
-- **TTS**: `inference.TTS` (Cartesia Sonic-3) via LiveKit Inference
+- **STT**: `google.STT` (Chirp 3) with language auto-detection (`ar-XA`, `en-US`)
+- **LLM**: `google.LLM` (Gemini 3.5 Flash) via Vertex AI
+- **TTS**: `google.TTS` (Chirp 3 HD Aoede) via Vertex AI
 - **VAD**: Silero VAD for turn detection
 
-Azure Speech requires its own API key and region. LiveKit Inference handles the rest (LLM, TTS) — no separate API keys needed beyond LiveKit Cloud credentials.
+Google STT, LLM, and TTS require Google Cloud credentials (e.g., via the `GOOGLE_APPLICATION_CREDENTIALS` environment variable).
 
 ## Contribution
 *Maintained by Yaquod AI Engineering team (Mohamed Kardosha, Khaled Helmy, Khaled Zakarya).*
