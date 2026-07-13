@@ -51,6 +51,9 @@ A bilingual (Arabic/English) real-time voice AI assistant powered by **LiveKit A
    | `LIVEKIT_API_KEY` | LiveKit Cloud API key |
    | `LIVEKIT_API_SECRET` | LiveKit Cloud API secret |
    | `GOOGLE_APPLICATION_CREDENTIALS` | Path to Google Cloud Service Account JSON key |
+   | `GOOGLE_CLOUD_PROJECT` | Your Google Cloud Project ID |
+   | `GOOGLE_CLOUD_LOCATION` | Region for your Vertex AI resources (e.g., `europe-west2`) |
+   | `GOOGLE_GENAI_USE_VERTEXAI` | Set to `true` to force Vertex AI backend for LiveKit |
    | `GOOGLE_MAPS_API_KEY` | Google Maps Places API key (required for nearby places search) |
    | `WEATHER_API_KEY` | Your WeatherAPI.com API key (required for weather tool) |
    | `MQTT_HOST` | MQTT broker hostname or IP address (e.g. `localhost`) |
