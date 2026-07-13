@@ -51,9 +51,6 @@ async def login(data: LoginRequest):
 
 @app.post("/getToken")
 async def get_token(request: TokenRequest):
-    if not request.car_id:
-        raise HTTPException(status_code=400, detail="car_id is required")
-
     redis_client = get_redis()
     mapped_vin = redis_client.get(f"vehicle:map:{request.car_id}")
     if not mapped_vin:

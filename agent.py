@@ -566,9 +566,9 @@ async def my_agent(ctx: agents.JobContext):
         await disconnected.wait()
 
     finally:
-        logger.info(f"[LiveKit Session] Ending for car: {vehicle_id}. Cleaning up...")
+        logger.info("[LiveKit Session] Ending for car: %s. Cleaning up...", vehicle_id)
         r_client.delete(f"vehicle:status:{vehicle_id}")
-        logger.info(f"[LiveKit CleanUp] Cleared live state for {vehicle_id}")
+        logger.info("[LiveKit CleanUp] Cleared live state for %s", vehicle_id)
 
 
 if __name__ == "__main__":

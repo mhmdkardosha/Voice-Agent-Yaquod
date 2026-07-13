@@ -101,7 +101,7 @@ mypy_extensions==1.1.0
 nest-asyncio==1.6.0
 nest-asyncio2==1.7.2
 networkx==3.6.1
-nltk==3.9.4
+nltk==3.10.0
 numpy==2.4.6
 onnxruntime==1.27.0
 openai==2.44.0
