@@ -5,7 +5,7 @@ __pycache__/
 
 # Environment / secrets
 .env
-service-account.json
+service_account.json
 *.key
 *.pem
 
