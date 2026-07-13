@@ -12,6 +12,7 @@ dependencies = [
     "httpx2",
     "livekit-agents",
     "livekit-plugins-azure",
+    "livekit-plugins-google",
     "livekit-plugins-openai",
     "livekit-plugins-silero",
     "livekit-plugins-turn-detector",
