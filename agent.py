@@ -24,12 +24,14 @@ from livekit.agents import (
     Agent,
     AgentServer,
     AgentSession,
+    APIConnectOptions,
     RunContext,
-    TurnHandlingOptions,
     function_tool,
     inference,
 )
-from livekit.plugins import azure
+from livekit.agents.voice.agent_session import SessionConnectOptions
+from livekit.agents.voice import room_io
+from livekit.plugins import google
 
 from config.constants import ALLOWED_ACTIONS
 from llm.prompts import STARTER_GREETING, SYSTEM_PROMPT
@@ -47,14 +49,9 @@ def _strip_tashkeel(text: str) -> str:
 
 logger = logging.getLogger("yaquod-agent")
 
-_ARABIC_VOICE = (
-    "fc923f89-1de5-4ddf-b93c-6da2ba63428a"  # Katie (Cartesia default) — multilingual, works with ar
-)
-_ENGLISH_VOICE = "273f9ef7-9fc2-4def-88bb-ab108c6249ca"  # Jacqueline — en-US female
-
 LANGUAGE_CONFIGS = {
-    "ar": {"stt_lang": "ar", "tts_lang": "ar", "voice_id": _ARABIC_VOICE},
-    "en": {"stt_lang": "en", "tts_lang": "en", "voice_id": _ENGLISH_VOICE},
+    "ar": {"stt_lang": "ar-XA", "tts_lang": "ar-XA", "voice_name": "ar-XA-Chirp3-HD-Aoede"},
+    "en": {"stt_lang": "en-US", "tts_lang": "en-US", "voice_name": "en-US-Chirp3-HD-Aoede"},
 }
 
 DEFAULT_LANG = "ar"
@@ -103,13 +100,9 @@ class Assistant(Agent):
         logger.info(f"Switching language: {self._current_lang} -> {language}")
 
         session.tts.update_options(
-            voice=config["voice_id"],
+            voice_name=config["voice_name"],
             language=config["tts_lang"],
         )
-
-        pool = getattr(session.tts, "_pool", None)
-        if pool is not None and hasattr(pool, "invalidate"):
-            pool.invalidate()
 
         self._current_lang = language
 
@@ -524,61 +517,57 @@ server = AgentServer()
 async def my_agent(ctx: agents.JobContext):
     default_config = LANGUAGE_CONFIGS[DEFAULT_LANG]
     r_client = get_redis()
-    vehicle_id = "vehicle_001"
-
-    # if ctx.room.metadata:
-    #     try:
-    #         metadata = json.loads(ctx.room.metadata)
-    #         vehicle_id = metadata.get("car_id", "vehicle_001")
-    #     except json.JSONDecodeError:
-    #         logger.error("Failed to parse room metadata as JSON")
-    central_mqtt.start()
+    import json
     try:
-        session = AgentSession(
-            stt=azure.STT(language=["ar-EG", "en-US"]),
-            llm=inference.LLM(model="google/gemini-3.1-flash-lite"),
-            tts=inference.TTS(
-                model="cartesia/sonic-3.5",
-                voice=default_config["voice_id"],
-                language=default_config["tts_lang"],
-            ),
-            turn_handling=TurnHandlingOptions(turn_detection="vad"),
-        )
+        meta = json.loads(ctx.job.metadata)
+        vehicle_id = meta.get("car_id", "vehicle_001")
+    except (json.JSONDecodeError, TypeError):
+        vehicle_id = "vehicle_001"
+        logger.warning("Failed to parse metadata; falling back to vehicle_001")
 
+    central_mqtt.start()
+
+    session = AgentSession(
+        stt=google.STT(
+            languages=[default_config["stt_lang"], LANGUAGE_CONFIGS["en"]["stt_lang"]],
+            detect_language=True,
+            model="chirp_3",
+            location="eu",
+        ),
+        llm=google.LLM(
+            model="gemini-3.5-flash",
+            vertexai=True,
+            location="europe-west2",
+            thinking_config={"thinking_level": "low"},
+        ),
+        tts=google.TTS(
+            language=default_config["tts_lang"],
+            voice_name=default_config["voice_name"],
+            location="eu",
+        ),
+        turn_detection=inference.TurnDetector(),
+        conn_options=SessionConnectOptions(
+            tts_conn_options=APIConnectOptions(timeout=60.0),
+        ),
+    )
+
+    try:
         assistant = Assistant(vehicle_id=vehicle_id)
-        await session.start(room=ctx.room, agent=assistant)
+        await session.start(
+            room=ctx.room,
+            agent=assistant,
+            room_options=room_io.RoomOptions(close_on_disconnect=False),
+        )
         await session.generate_reply(instructions=STARTER_GREETING)
 
-        disconnect_event = asyncio.Event()
-        ctx.room.on("disconnected", disconnect_event.set)
-        await disconnect_event.wait()
+        disconnected = asyncio.Event()
+        ctx.room.on("disconnected", disconnected.set)
+        await disconnected.wait()
 
     finally:
         logger.info(f"[LiveKit Session] Ending for car: {vehicle_id}. Cleaning up...")
-        try:
-            await r_client.delete(f"vehicle:status:{vehicle_id}")
-            lua_cleanup_script = """
-            local vin = redis.call('get', KEYS[1])
-            if vin then
-                redis.call('del', 'vehicle:auth:' .. vin)
-                redis.call('del', KEYS[1])
-                return 1
-            end
-            return 0
-            """
-
-            map_key = f"vehicle:map:{vehicle_id}"
-            result = await r_client.eval(lua_cleanup_script, 1, map_key)
-
-            if result == 1:
-                logger.info(
-                    f"[LiveKit CleanUp] Redis safely cleared auth and mapping internally for {vehicle_id}."
-                )
-            else:
-                logger.warning(f"[LiveKit CleanUp] No mapping found internally for {vehicle_id}.")
-
-        except Exception as e:
-            logger.error(f"Error during completely secure Redis cleanup: {e}")
+        r_client.delete(f"vehicle:status:{vehicle_id}")
+        logger.info(f"[LiveKit CleanUp] Cleared live state for {vehicle_id}")
 
 
 if __name__ == "__main__":
