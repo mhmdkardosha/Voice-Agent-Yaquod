@@ -224,7 +224,7 @@ class Assistant(Agent):
         try:
             r_client = get_redis()
 
-            data_str = await r_client.get(redis_key)
+            data_str = r_client.get(redis_key)
             if data_str:
                 data = json.loads(data_str)
                 lat = data.get("lat")
