@@ -46,8 +46,6 @@ async def login(data: LoginRequest):
 
     return {"status": "success", "message": "Authenticated", "vehicle_id": active_vehicle_id}
 
-    print(f"Authenticated {active_vehicle_id}")
-
 
 @app.post("/getToken")
 async def get_token(request: TokenRequest):
