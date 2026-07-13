@@ -25,6 +25,7 @@ Hardcoded defaults match the static test credentials in validation_service.py:
 """
 
 import asyncio
+import contextlib
 import json
 import logging
 import math
@@ -49,61 +50,67 @@ logging.basicConfig(
 logger = logging.getLogger("fake-vehicle")
 
 # ── Configuration ──────────────────────────────────────────────────────────────
-VEHICLE_ID   = os.getenv("FAKE_VEHICLE_ID",  "vehicle_001")
-VIN_NUMBER   = os.getenv("FAKE_VIN_NUMBER",  "VIN_12345")
-JWT_TOKEN    = os.getenv("FAKE_JWT_TOKEN",   "JWT_SECRET_TOKEN")
-BACKEND_URL  = os.getenv("FAKE_BACKEND_URL", "https://yaquod-agent.fastapicloud.dev")
+VEHICLE_ID = os.getenv("FAKE_VEHICLE_ID", "vehicle_001")
+VIN_NUMBER = os.getenv("FAKE_VIN_NUMBER", "VIN_12345")
+JWT_TOKEN = os.getenv("FAKE_JWT_TOKEN", "JWT_SECRET_TOKEN")
+BACKEND_URL = os.getenv("FAKE_BACKEND_URL", "https://yaquod-agent.fastapicloud.dev")
 
-MQTT_HOST    = os.getenv("MQTT_HOST",     "localhost")
-MQTT_PORT    = int(os.getenv("MQTT_PORT", "1883"))
-MQTT_USER    = os.getenv("MQTT_USERNAME", "") or None
-MQTT_PASS    = os.getenv("MQTT_PASSWORD", "") or None
-MQTT_SSL_ON  = os.getenv("MQTT_SSL", "false").lower() == "true"
+MQTT_HOST = os.getenv("MQTT_HOST", "localhost")
+MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
+MQTT_USER = os.getenv("MQTT_USERNAME", "") or None
+MQTT_PASS = os.getenv("MQTT_PASSWORD", "") or None
+MQTT_SSL_ON = os.getenv("MQTT_SSL", "false").lower() == "true"
 
-STATE_INTERVAL_S    = 20    # publish full state every N seconds
-LOCATION_INTERVAL_S = 10    # publish GPS every N seconds
+STATE_INTERVAL_S = 20  # publish full state every N seconds
+LOCATION_INTERVAL_S = 10  # publish GPS every N seconds
+
+_background_tasks = set()
 
 # ── Fake telemetry state (mutable) ─────────────────────────────────────────────
 # Mimics a real embedded device payload. Updated in place when commands arrive.
 STATE: dict[str, Any] = {
-    "vin_number":           VIN_NUMBER,
-    "vehicle_model":        "Yaquod EV",
-    "vehicle_color":        "Pearl White",
-    "plate_num":            "ABC-1234",
-    "number_of_seats":      4,
-    "battery_level":        82,
-    "speed":                0.0,
-    "pickup_point_name":    "Cairo International Airport",
-    "destination_name":     "Tahrir Square",
-    "remaining_distance":   14.3,
-    "remaining_time":       22.0,
+    "vin_number": VIN_NUMBER,
+    "vehicle_model": "Yaquod EV",
+    "vehicle_color": "Pearl White",
+    "plate_num": "ABC-1234",
+    "number_of_seats": 4,
+    "battery_level": 82,
+    "speed": 0.0,
+    "pickup_point_name": "Cairo International Airport",
+    "destination_name": "Tahrir Square",
+    "remaining_distance": 14.3,
+    "remaining_time": 22.0,
     "expected_trip_duration": 30.0,
     # Cabin
-    "ac_status":            "on",
-    "ac_temperature":       22.0,
-    "ac_fan_speed":         2,
-    "ac_airflow_mode":      "face",
-    "ac_auto":              False,
-    "ac_sync":              False,
-    "window_status":        {"front_left": "closed", "front_right": "closed",
-                             "rear_left": "closed",  "rear_right": "closed"},
-    "window_lock_status":   False,
-    "music_status":         True,
-    "music_volume":         55,
+    "ac_status": "on",
+    "ac_temperature": 22.0,
+    "ac_fan_speed": 2,
+    "ac_airflow_mode": "face",
+    "ac_auto": False,
+    "ac_sync": False,
+    "window_status": {
+        "front_left": "closed",
+        "front_right": "closed",
+        "rear_left": "closed",
+        "rear_right": "closed",
+    },
+    "window_lock_status": False,
+    "music_status": True,
+    "music_volume": 55,
     "reading_light_status": {"front": "off", "rear": "off"},
-    "seat_status":          {"driver": "normal", "passenger": "normal"},
-    "_safe_stop":           False,
+    "seat_status": {"driver": "normal", "passenger": "normal"},
+    "_safe_stop": False,
 }
 
 # Start near Cairo (30.0444°N, 31.2357°E) and drift slightly each tick
-_BASE_LAT  = 30.0444
-_BASE_LNG  = 31.2357
+_BASE_LAT = 30.0444
+_BASE_LNG = 31.2357
 
 
 def _gps_tick(tick: int) -> tuple[float, float]:
     """Tiny circle route so the agent gets changing coords."""
     angle = (tick * 5) % 360
-    rad   = math.radians(angle)
+    rad = math.radians(angle)
     return (
         round(_BASE_LAT + 0.001 * math.cos(rad), 6),
         round(_BASE_LNG + 0.001 * math.sin(rad), 6),
@@ -146,11 +153,19 @@ def _apply_action(action: str, params: dict) -> list[str]:
             changes.append(f"Climate sync {'ON' if STATE['ac_sync'] else 'OFF'}")
         elif action == "window_open":
             target = str(p.get("window", "all"))
-            STATE["window_status"] = {k: "open" for k in STATE["window_status"]} if target == "all" else {**STATE["window_status"], target: "open"}
+            STATE["window_status"] = (
+                dict.fromkeys(STATE["window_status"], "open")
+                if target == "all"
+                else {**STATE["window_status"], target: "open"}
+            )
             changes.append(f"Window opened: {target}")
         elif action == "window_close":
             target = str(p.get("window", "all"))
-            STATE["window_status"] = {k: "closed" for k in STATE["window_status"]} if target == "all" else {**STATE["window_status"], target: "closed"}
+            STATE["window_status"] = (
+                dict.fromkeys(STATE["window_status"], "closed")
+                if target == "all"
+                else {**STATE["window_status"], target: "closed"}
+            )
             changes.append(f"Window closed: {target}")
         elif action == "window_lock":
             STATE["window_lock_status"] = True
@@ -217,22 +232,28 @@ async def _publish_state(client: aiomqtt.Client, lat: float, lng: float, tick: i
     """Publish current STATE with fresh GPS and derived fields."""
     snapshot = {
         **STATE,
-        "timestamp":  int(time.time()),
-        "lat":        lat,
-        "long":       lng,
+        "timestamp": int(time.time()),
+        "lat": lat,
+        "long": lng,
         "battery_level": max(10, STATE["battery_level"]),
     }
     topic = f"vehicle/{VEHICLE_ID}/state"
     await client.publish(topic, json.dumps(snapshot))
-    logger.info("📤 [PUBLISH] → %s  (lat=%.6f lon=%.6f spd=%.1f km/h bat=%d%%)",
-                topic, lat, lng, snapshot["speed"], snapshot["battery_level"])
+    logger.info(
+        "📤 [PUBLISH] → %s  (lat=%.6f lon=%.6f spd=%.1f km/h bat=%d%%)",
+        topic,
+        lat,
+        lng,
+        snapshot["speed"],
+        snapshot["battery_level"],
+    )
 
 
 async def _publish_location(client: aiomqtt.Client, lat: float, lng: float) -> None:
     """Publish a standalone GPS update."""
     payload = {
         "vin_number": VIN_NUMBER,
-        "lat":  lat,
+        "lat": lat,
         "long": lng,
         "timestamp": int(time.time()),
     }
@@ -261,8 +282,8 @@ def do_login() -> bool:
     url = f"{BACKEND_URL}/login"
     payload = {
         "vehicle_id": VEHICLE_ID,
-        "vin_number":  VIN_NUMBER,
-        "jwt":         JWT_TOKEN,
+        "vin_number": VIN_NUMBER,
+        "jwt": JWT_TOKEN,
     }
     logger.info("Calling POST %s ...", url)
     try:
@@ -288,32 +309,32 @@ async def run_simulator():
 
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
-        try:
+        with contextlib.suppress(NotImplementedError):
             loop.add_signal_handler(sig, _signal_handler)
-        except NotImplementedError:
-            pass  # Windows
 
     logger.info("Connecting to MQTT broker %s:%s (SSL=%s)", MQTT_HOST, MQTT_PORT, MQTT_SSL_ON)
 
     async with aiomqtt.Client(
-        hostname    = MQTT_HOST,
-        port        = MQTT_PORT,
-        username    = MQTT_USER,
-        password    = MQTT_PASS,
-        tls_context = tls_ctx,
+        hostname=MQTT_HOST,
+        port=MQTT_PORT,
+        username=MQTT_USER,
+        password=MQTT_PASS,
+        tls_context=tls_ctx,
     ) as client:
-
         action_topic = f"vehicle/{VEHICLE_ID}/action"
-        nav_topic    = f"vehicle/{VEHICLE_ID}/navigation/#"
+        nav_topic = f"vehicle/{VEHICLE_ID}/navigation/#"
         await client.subscribe(action_topic)
         await client.subscribe(nav_topic)
         logger.info("✅ Connected. Subscribed to %s and %s", action_topic, nav_topic)
-        logger.info("Publishing state every %ds, GPS every %ds. Press Ctrl+C to stop.",
-                    STATE_INTERVAL_S, LOCATION_INTERVAL_S)
+        logger.info(
+            "Publishing state every %ds, GPS every %ds. Press Ctrl+C to stop.",
+            STATE_INTERVAL_S,
+            LOCATION_INTERVAL_S,
+        )
 
-        tick         = 0
+        tick = 0
         last_state_t = 0.0
-        last_loc_t   = 0.0
+        last_loc_t = 0.0
 
         async def publish_loop():
             nonlocal tick, last_state_t, last_loc_t
@@ -338,8 +359,8 @@ async def run_simulator():
         async def listen_loop():
             nonlocal tick, last_state_t, last_loc_t
             async for message in client.messages:
-                topic   = message.topic.value
-                raw     = message.payload.decode(errors="replace")
+                topic = message.topic.value
+                raw = message.payload.decode(errors="replace")
                 logger.info("📥 [RECEIVED] ← %s  %s", topic, raw[:200])
 
                 try:
@@ -348,27 +369,31 @@ async def run_simulator():
                     continue
 
                 if "/action" in topic:
-                    action    = data.get("action", "")
-                    params    = data.get("parameters", {})
-                    changes   = _apply_action(action, params)
+                    action = data.get("action", "")
+                    params = data.get("parameters", {})
+                    changes = _apply_action(action, params)
                     for c in changes:
                         logger.info("   ⚙️  %s", c)
 
                     lat, lng = _gps_tick(tick)
 
                     if action == "safe_stop":
-                        asyncio.create_task(_gradual_stop(client, lat, lng, tick))
+                        task = asyncio.create_task(_gradual_stop(client, lat, lng, tick))
+                        _background_tasks.add(task)
+                        task.add_done_callback(_background_tasks.discard)
                     else:
                         await _publish_state(client, lat, lng, tick)
 
                 elif "/navigation/change" in topic:
                     dest = data.get("destination", "unknown")
-                    nav_lat  = data.get("latitude")
-                    nav_lng  = data.get("longitude")
+                    nav_lat = data.get("latitude")
+                    nav_lng = data.get("longitude")
                     STATE["destination_name"] = dest
                     STATE["remaining_distance"] = 999.0
                     STATE["remaining_time"] = 999.0
-                    logger.info("   🗺️  Navigation changed → %s  (%.4f, %.4f)", dest, nav_lat, nav_lng)
+                    logger.info(
+                        "   🗺️  Navigation changed → %s  (%.4f, %.4f)", dest, nav_lat, nav_lng
+                    )
                     await _publish_state(client, nav_lat or _BASE_LAT, nav_lng or _BASE_LNG, tick)
 
                 elif "/navigation/cancel" in topic:

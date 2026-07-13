@@ -29,8 +29,8 @@ from livekit.agents import (
     function_tool,
     inference,
 )
-from livekit.agents.voice.agent_session import SessionConnectOptions
 from livekit.agents.voice import room_io
+from livekit.agents.voice.agent_session import SessionConnectOptions
 from livekit.plugins import google
 
 from config.constants import ALLOWED_ACTIONS
@@ -518,6 +518,7 @@ async def my_agent(ctx: agents.JobContext):
     default_config = LANGUAGE_CONFIGS[DEFAULT_LANG]
     r_client = get_redis()
     import json
+
     try:
         meta = json.loads(ctx.job.metadata)
         vehicle_id = meta.get("car_id", "vehicle_001")

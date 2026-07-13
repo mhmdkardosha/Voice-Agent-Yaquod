@@ -3,13 +3,13 @@ import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
+from livekit import api
 
 from config.redis_db import get_redis
 from routes.models.login_request_model import LoginRequest
 from routes.models.token_request_model import TokenRequest
 from services.mqtt_service import central_mqtt
 from services.validation_service import validate_vehicle
-from livekit import api
 
 
 @asynccontextmanager
@@ -47,6 +47,7 @@ async def login(data: LoginRequest):
 
     print(f"Authenticated {active_vehicle_id}")
 
+
 @app.post("/getToken")
 async def get_token(request: TokenRequest):
     if not request.car_id:
@@ -70,6 +71,7 @@ async def get_token(request: TokenRequest):
         )
 
     import uuid
+
     room_name = f"car-{request.car_id}-{uuid.uuid4()}"
     participant_identity = f"car-{request.car_id}"
     participant_name = f"Car {request.car_id}"
@@ -81,7 +83,8 @@ async def get_token(request: TokenRequest):
     )
 
     token = (
-        api.AccessToken(api_key, api_secret)
+        api
+        .AccessToken(api_key, api_secret)
         .with_identity(participant_identity)
         .with_name(participant_name)
         .with_grants(api.VideoGrants(room_join=True, room=room_name))
