@@ -19,6 +19,19 @@ from services.mqtt_service import central_mqtt
 
 load_dotenv(override=True)
 
+# Restore service_account.json from GOOGLE_APPLICATION_CREDENTIALS_JSON environment variable if present
+_creds_env = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
+if _creds_env:
+    try:
+        with open("service_account.json", "w", encoding="utf-8") as _f:
+            _f.write(_creds_env)
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.path.abspath("service_account.json")
+    except Exception as _e:
+        print(f"[yaquod-agent] Warning: Failed to write service_account.json from secret: {_e}")
+elif os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
+    if not os.path.exists(os.getenv("GOOGLE_APPLICATION_CREDENTIALS")):
+        os.environ.pop("GOOGLE_APPLICATION_CREDENTIALS", None)
+
 from livekit import agents
 from livekit.agents import (
     Agent,
@@ -510,6 +523,38 @@ class Assistant(Agent):
         return f"Vehicle {vehicle_id} Cabin Status -> " + " | ".join(status_parts)
 
 
+def _get_google_credentials():
+    creds_json = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
+    if creds_json:
+        try:
+            return json.loads(creds_json)
+        except Exception as e:
+            logger.warning(f"Failed to parse GOOGLE_APPLICATION_CREDENTIALS_JSON: {e}")
+
+    env_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+    if env_path:
+        if env_path.strip().startswith("{"):
+            try:
+                return json.loads(env_path)
+            except Exception:
+                pass
+        elif os.path.exists(env_path):
+            try:
+                with open(env_path, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception as e:
+                logger.warning(f"Failed to read credentials file {env_path}: {e}")
+
+    if os.path.exists("service_account.json"):
+        try:
+            with open("service_account.json", "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            logger.warning(f"Failed to read service_account.json: {e}")
+
+    return None
+
+
 server = AgentServer()
 
 
@@ -517,7 +562,6 @@ server = AgentServer()
 async def my_agent(ctx: agents.JobContext):
     default_config = LANGUAGE_CONFIGS[DEFAULT_LANG]
     r_client = get_redis()
-    import json
 
     try:
         meta = json.loads(ctx.job.metadata)
@@ -528,24 +572,45 @@ async def my_agent(ctx: agents.JobContext):
 
     central_mqtt.start()
 
+    cred_info = _get_google_credentials()
+    google_creds = None
+    if cred_info:
+        try:
+            from google.oauth2 import service_account
+            google_creds = service_account.Credentials.from_service_account_info(cred_info)
+        except Exception as e:
+            logger.warning(f"Failed to build google service account credentials object: {e}")
+
+    stt_kwargs = {
+        "languages": [default_config["stt_lang"], LANGUAGE_CONFIGS["en"]["stt_lang"]],
+        "detect_language": True,
+        "model": "chirp_3",
+        "location": "eu",
+    }
+    if cred_info:
+        stt_kwargs["credentials_info"] = cred_info
+
+    llm_kwargs = {
+        "model": "gemini-3.5-flash",
+        "vertexai": True,
+        "location": "europe-west2",
+        "thinking_config": {"thinking_level": "low"},
+    }
+    if google_creds:
+        llm_kwargs["credentials"] = google_creds
+
+    tts_kwargs = {
+        "language": default_config["tts_lang"],
+        "voice_name": default_config["voice_name"],
+        "location": "eu",
+    }
+    if cred_info:
+        tts_kwargs["credentials_info"] = cred_info
+
     session = AgentSession(
-        stt=google.STT(
-            languages=[default_config["stt_lang"], LANGUAGE_CONFIGS["en"]["stt_lang"]],
-            detect_language=True,
-            model="chirp_3",
-            location="eu",
-        ),
-        llm=google.LLM(
-            model="gemini-3.5-flash",
-            vertexai=True,
-            location="europe-west2",
-            thinking_config={"thinking_level": "low"},
-        ),
-        tts=google.TTS(
-            language=default_config["tts_lang"],
-            voice_name=default_config["voice_name"],
-            location="eu",
-        ),
+        stt=google.STT(**stt_kwargs),
+        llm=google.LLM(**llm_kwargs),
+        tts=google.TTS(**tts_kwargs),
         turn_detection=inference.TurnDetector(),
         conn_options=SessionConnectOptions(
             tts_conn_options=APIConnectOptions(timeout=60.0),
