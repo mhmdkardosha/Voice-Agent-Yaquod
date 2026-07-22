@@ -581,49 +581,6 @@
             line-height: 1.6;
         }
 
-        /* ── Tabs ── */
-        .tab-bar {
-            display: flex;
-            gap: 4px;
-            margin-bottom: 14px;
-            background: rgba(15, 23, 42, 0.5);
-            border-radius: var(--radius-sm);
-            padding: 3px;
-        }
-
-        .tab-btn {
-            flex: 1;
-            padding: 8px 16px;
-            font-size: 12px;
-            font-weight: 600;
-            font-family: 'Inter', sans-serif;
-            border: none;
-            background: none;
-            cursor: pointer;
-            border-radius: 6px;
-            color: var(--text-muted);
-            transition: all 0.2s ease;
-        }
-
-        .tab-btn:hover {
-            background: rgba(99, 102, 241, 0.08);
-            color: var(--text-secondary);
-        }
-
-        .tab-btn.active {
-            background: var(--accent-blue);
-            color: white;
-            box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
-        }
-
-        .tab-content {
-            display: none;
-        }
-
-        .tab-content.active {
-            display: block;
-        }
-
         /* ── Log Area ── */
         #log-area {
             height: 160px;
@@ -667,7 +624,7 @@
         #log-area .log-level {
             font-weight: 600;
             flex-shrink: 0;
-            min-width: 70px;
+            min-width: 80px;
             text-transform: uppercase;
             font-size: 10px;
             letter-spacing: 0.05em;
@@ -690,8 +647,16 @@
             color: #c084fc;
         }
 
-        #log-area .log-level.transcript {
-            color: #34d399;
+        #log-area .log-level.tool {
+            color: #2dd4bf;
+        }
+
+        #log-area .log-level.mqtt {
+            color: #fb923c;
+        }
+
+        #log-area .log-level.state {
+            color: #f472b6;
         }
 
         #log-area .log-msg {
@@ -700,59 +665,6 @@
         }
 
         .log-empty {
-            color: var(--text-muted);
-            font-style: italic;
-        }
-
-        /* ── Data Area ── */
-        #data-area {
-            background: var(--log-bg);
-            color: var(--text-secondary);
-            border-radius: var(--radius-sm);
-            padding: 12px 16px;
-            font-family: 'JetBrains Mono', ui-monospace, monospace;
-            font-size: 12px;
-            line-height: 1.6;
-            max-height: 200px;
-            overflow-y: auto;
-            border: 1px solid var(--border-subtle);
-        }
-
-        #data-area::-webkit-scrollbar {
-            width: 5px;
-        }
-
-        #data-area::-webkit-scrollbar-track {
-            background: transparent;
-        }
-
-        #data-area::-webkit-scrollbar-thumb {
-            background: rgba(100, 116, 139, 0.25);
-            border-radius: 10px;
-        }
-
-        #data-area .data-entry {
-            padding: 8px 0;
-            border-bottom: 1px solid rgba(51, 65, 85, 0.4);
-        }
-
-        #data-area .data-entry:last-child {
-            border-bottom: none;
-        }
-
-        #data-area .data-topic {
-            color: var(--accent-blue-hover);
-            font-weight: 600;
-        }
-
-        #data-area .data-payload {
-            color: #e2e8f0;
-            white-space: pre-wrap;
-            word-break: break-all;
-            margin-top: 4px;
-        }
-
-        .data-empty {
             color: var(--text-muted);
             font-style: italic;
         }
@@ -777,7 +689,8 @@
             color: var(--text-secondary);
         }
 
-        .theme-btn {
+        .theme-btn,
+        .mic-btn {
             font-size: 16px;
             line-height: 1;
             width: 34px;
@@ -793,10 +706,21 @@
             padding: 0;
         }
 
-        .theme-btn:hover {
+        .theme-btn:hover,
+        .mic-btn:hover {
             background: rgba(255, 255, 255, 0.12);
             border-color: var(--border-focus);
             transform: scale(1.05);
+        }
+
+        .mic-btn.muted {
+            background: rgba(239, 68, 68, 0.15);
+            border-color: rgba(239, 68, 68, 0.3);
+        }
+
+        .mic-btn.muted:hover {
+            background: rgba(239, 68, 68, 0.25);
+            border-color: rgba(239, 68, 68, 0.5);
         }
 
         .msg-count {
@@ -868,6 +792,8 @@
                 <button id="connectBtn" class="btn btn-primary" onclick="connect()">Connect</button>
                 <button id="disconnectBtn" class="btn btn-danger" onclick="disconnect()"
                     style="display:none">Disconnect</button>
+                <button id="micBtn" class="mic-btn" onclick="toggleMic()"
+                    title="Toggle microphone" style="display:none">🎙️</button>
             </div>
             <div class="status-bar">
                 <span class="status-dot disconnected" id="statusDot"></span>
@@ -891,21 +817,14 @@
             </div>
         </div>
 
-        <!-- Tabs: Logs / Data -->
+        <!-- Live Log -->
         <div class="card">
-            <div class="tab-bar">
-                <button class="tab-btn active" onclick="switchTab('logs', this)">Live Log</button>
-                <button class="tab-btn" onclick="switchTab('data', this)">Data Channel</button>
+            <div class="card-header">
+                <h3>Live Log</h3>
+                <button class="clear-btn" onclick="document.getElementById('log-area').innerHTML='<div class=\'log-empty\'>No events yet.</div>'">Clear</button>
             </div>
-            <div id="tab-logs" class="tab-content active">
-                <div id="log-area">
-                    <div class="log-empty">No events yet.</div>
-                </div>
-            </div>
-            <div id="tab-data" class="tab-content">
-                <div id="data-area">
-                    <div class="data-empty">No data channel messages received.</div>
-                </div>
+            <div id="log-area" style="margin-top: 12px">
+                <div class="log-empty">No events yet.</div>
             </div>
         </div>
     </div>
@@ -1085,15 +1004,27 @@
                     area.scrollTop = area.scrollHeight;
                     return;
                 } else {
-                    const wasOngoing = bubble.classList.contains('ongoing');
                     bubble.classList.remove('ongoing', 'interim');
                     bubble.querySelector('.msg-text').innerHTML = renderMessageText(text);
-                    if (role !== 'system' && wasOngoing) {
-                        // Only count once: the first time this bubble is finalized.
+                    // Persist final text to history if this bubble was already counted
+                    if (role !== 'system' && bubble.dataset.counted) {
+                        // Update the last history entry for this segment with the final text
+                        const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                        const histIdx = chatHistory.findIndex(h => h._segmentId === segmentId);
+                        if (histIdx !== -1) {
+                            chatHistory[histIdx].text = text;
+                            chatHistory[histIdx].time = now;
+                        } else {
+                            chatHistory.push({ role, text, time: now, _segmentId: segmentId || undefined });
+                        }
+                        saveChatHistory();
+                    } else if (role !== 'system' && !bubble.dataset.counted) {
+                        // Edge case: bubble existed but was never counted (shouldn't happen, but be safe)
+                        bubble.dataset.counted = '1';
                         transcriptCount++;
                         document.getElementById('transcriptCount').textContent = transcriptCount + ' message' + (transcriptCount !== 1 ? 's' : '');
                         const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                        chatHistory.push({ role, text, time: now });
+                        chatHistory.push({ role, text, time: now, _segmentId: segmentId || undefined });
                         saveChatHistory();
                     }
                     area.scrollTop = area.scrollHeight;
@@ -1101,6 +1032,7 @@
                 }
             }
 
+            // ── Create a new bubble ──────────────────────────────────────────────
             const msg = document.createElement('div');
             msg.className = `msg ${role}${isInterim ? ' interim ongoing' : ''}`;
             if (segmentId) msg.dataset.segmentId = segmentId;
@@ -1117,11 +1049,15 @@
             area.appendChild(msg);
             area.scrollTop = area.scrollHeight;
 
-            if (!isInterim && role !== 'system') {
+            // Count every new non-system bubble immediately (interim or final).
+            // This ensures the counter goes up as soon as the user or agent starts
+            // speaking, instead of waiting for a "final" event that may never arrive.
+            if (role !== 'system') {
+                msg.dataset.counted = '1';
                 transcriptCount++;
                 document.getElementById('transcriptCount').textContent = transcriptCount + ' message' + (transcriptCount !== 1 ? 's' : '');
                 const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                chatHistory.push({ role, text, time: now });
+                chatHistory.push({ role, text, time: now, _segmentId: segmentId || undefined });
                 saveChatHistory();
             }
         }
@@ -1133,27 +1069,6 @@
             area.innerHTML = '<div class="placeholder-text"><span class="placeholder-icon">🎙️</span><span>Connect and speak to see the live conversation between you and the agent.</span></div>';
             transcriptCount = 0;
             document.getElementById('transcriptCount').textContent = '0 messages';
-        }
-
-        // ── Data channel ─────────────────────────────────────────────────────────
-        function addDataEntry(topic, payload) {
-            const area = document.getElementById('data-area');
-            const empty = area.querySelector('.data-empty');
-            if (empty) empty.remove();
-            const time = new Date().toLocaleTimeString();
-            const entry = document.createElement('div');
-            entry.className = 'data-entry';
-            entry.innerHTML = `<div style="display:flex;justify-content:space-between;color:var(--text-muted);font-size:10px"><span>${time}</span></div><div class="data-topic">${escapeHtml(topic)}</div><div class="data-payload">${escapeHtml(typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2))}</div>`;
-            area.appendChild(entry);
-            area.scrollTop = area.scrollHeight;
-        }
-
-        // ── Tabs ─────────────────────────────────────────────────────────────────
-        function switchTab(tabId, btn) {
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-            btn.classList.add('active');
-            document.getElementById('tab-' + tabId).classList.add('active');
         }
 
         // ── Helpers ──────────────────────────────────────────────────────────────
@@ -1248,24 +1163,87 @@
                     for (const seg of segments) {
                         const isAgent = participant && participant.identity !== room.localParticipant.identity;
                         addMessage(isAgent ? 'agent' : 'user', seg.text, !seg.isFinal, seg.id);
-                        log('transcript', `${isAgent ? 'Agent' : 'You'}: ${seg.text}${seg.isFinal ? '' : ' (interim)'}`);
                     }
                 });
 
-                // Data channel
-                room.on(RoomEvent.DataReceived, (payload, participant) => {
+                // Data channel — parse agent framework messages for tool calls,
+                // MQTT publishes, state changes, and other operational events.
+                room.on(RoomEvent.DataReceived, (payload, participant, _kind, topic) => {
                     const text = new TextDecoder().decode(payload);
                     let parsed;
                     try { parsed = JSON.parse(text); } catch { parsed = text; }
-                    const topic = participant ? `from:${participant.identity}` : 'server';
-                    log('data', `Data received ${topic}: ${typeof parsed === 'string' ? parsed.substring(0, 80) : JSON.stringify(parsed).substring(0, 80)}`);
-                    addDataEntry(topic, parsed);
+                    const source = participant ? participant.identity : 'server';
+
+                    // ── Parse structured agent events for the Live Log ──
+                    if (typeof parsed === 'object' && parsed !== null) {
+                        const msgType = parsed.type || '';
+
+                        // Tools that publish to MQTT — show with the mqtt level
+                        const MQTT_TOOLS = new Set([
+                            'vehicle_action', 'change_destination', 'cancel_destination',
+                        ]);
+
+                        // function_tools_executed: sent by the agent after tool calls complete
+                        if (msgType === 'function_tools_executed') {
+                            const calls = parsed.calls || [];
+                            for (const fc of calls) {
+                                const name = fc.name || 'unknown';
+                                // Parse arguments (JSON string from the LLM)
+                                let argsDisplay = '';
+                                try {
+                                    const argsObj = typeof fc.arguments === 'string'
+                                        ? JSON.parse(fc.arguments) : fc.arguments;
+                                    argsDisplay = Object.entries(argsObj || {})
+                                        .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
+                                        .join(', ');
+                                } catch {
+                                    argsDisplay = fc.arguments || '';
+                                }
+
+                                const isMqtt = MQTT_TOOLS.has(name);
+                                const errorTag = fc.is_error ? ' ❌ ERROR' : '';
+
+                                // Log the call
+                                if (isMqtt) {
+                                    log('mqtt', `📡 ${name}(${argsDisplay})`);
+                                } else {
+                                    log('tool', `⚡ ${name}(${argsDisplay})`);
+                                }
+
+                                // Log the result
+                                if (fc.result !== undefined) {
+                                    const resultStr = String(fc.result).substring(0, 150);
+                                    if (isMqtt) {
+                                        log('mqtt', `   ↳ ${resultStr}${errorTag}`);
+                                    } else {
+                                        log('tool', `   ↳ ${resultStr}${errorTag}`);
+                                    }
+                                }
+                            }
+                            if (!calls.length) {
+                                log('tool', `⚡ Tool event (no calls): ${JSON.stringify(parsed).substring(0, 120)}`);
+                            }
+                        }
+                        // Catch-all for other structured messages
+                        else {
+                            log('data', `[${source}] ${JSON.stringify(parsed).substring(0, 120)}`);
+                        }
+                    } else {
+                        log('data', `[${source}] ${String(parsed).substring(0, 120)}`);
+                    }
                 });
 
-                // Agent state from attributes
+                // Agent state from participant attributes — LiveKit Agents
+                // framework publishes state transitions (listening, thinking,
+                // speaking) via the lk.agent.state attribute.
                 room.on(RoomEvent.ParticipantAttributesChanged, (changed, participant) => {
                     for (const [key, value] of Object.entries(changed)) {
-                        log('info', `Attribute ${key}=${value} (${participant.identity})`);
+                        if (key === 'lk.agent.state') {
+                            const stateEmoji = { listening: '👂', thinking: '🧠', speaking: '🗣️' };
+                            log('state', `${stateEmoji[value] || '🔄'} Agent → ${value}`);
+                        } else {
+                            log('info', `Attribute ${key}=${value} (${participant.identity})`);
+                        }
                     }
                 });
 
@@ -1274,7 +1252,10 @@
                 log('info', 'Requesting microphone...');
                 await room.localParticipant.setMicrophoneEnabled(true);
                 log('info', 'Microphone enabled. Agent is listening.');
-                addMessage('system', '🎤 Connected — start speaking...');
+                addMessage('system', '🎙️ Connected — start speaking...');
+                document.getElementById('micBtn').style.display = 'flex';
+                document.getElementById('micBtn').classList.remove('muted');
+                document.getElementById('micBtn').textContent = '🎙️';
 
             } catch (e) {
                 log('error', `Connection failed: ${e.message}`);
@@ -1282,6 +1263,7 @@
                 document.getElementById('connectBtn').disabled = false;
                 document.getElementById('connectBtn').style.display = 'inline-block';
                 document.getElementById('disconnectBtn').style.display = 'none';
+                document.getElementById('micBtn').style.display = 'none';
                 room = null;
             }
         }
@@ -1296,10 +1278,22 @@
             document.getElementById('connectBtn').style.display = 'inline-block';
             document.getElementById('connectBtn').disabled = false;
             document.getElementById('disconnectBtn').style.display = 'none';
+            document.getElementById('micBtn').style.display = 'none';
             setStatus('Disconnected', 'disconnected');
             updateRoomBadge(null);
             updateIdentityBadge(null);
             room = null;
+        }
+
+        async function toggleMic() {
+            if (!room) return;
+            const btn = document.getElementById('micBtn');
+            const isMuted = btn.classList.contains('muted');
+            await room.localParticipant.setMicrophoneEnabled(isMuted);
+            btn.classList.toggle('muted');
+            btn.textContent = isMuted ? '🎙️' : '🔇';
+            btn.title = isMuted ? 'Mute microphone' : 'Unmute microphone';
+            log('info', isMuted ? 'Microphone unmuted' : 'Microphone muted');
         }
     </script>
 </body>

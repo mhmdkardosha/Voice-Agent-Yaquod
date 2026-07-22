@@ -559,6 +559,33 @@ async def my_agent(ctx: agents.JobContext):
             agent=assistant,
             room_options=room_io.RoomOptions(close_on_disconnect=False),
         )
+
+        # ── Publish tool-call events to the data channel so the test
+        #    client can display them in the Live Log. ──────────────────
+        @session.on("function_tools_executed")
+        def _on_tools_executed(event):
+            calls_payload = []
+            for fc, output in event.zipped():
+                entry = {
+                    "name": fc.name,
+                    "arguments": fc.arguments,
+                    "call_id": fc.call_id,
+                }
+                if output is not None:
+                    entry["result"] = output.output
+                    entry["is_error"] = output.is_error
+                calls_payload.append(entry)
+
+            data = json.dumps({
+                "type": "function_tools_executed",
+                "calls": calls_payload,
+            })
+            asyncio.ensure_future(
+                ctx.room.local_participant.publish_data(
+                    data, reliable=True, topic="agent-tools",
+                )
+            )
+
         await session.generate_reply(instructions=STARTER_GREETING)
 
         disconnected = asyncio.Event()
